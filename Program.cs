@@ -1,10 +1,18 @@
 using dotenv.net;
 using LangChain.Providers;
 using LangChain.Providers.Google;
+using System.IO;
 
 DotEnv.Load();
 
+var pdfFiles = ReadPdfFile();
+// for (var i = 0; i < pdfFiles.Length; i++)
+// {
+//     Console.WriteLine($"PDF File {i + 1}/{pdfFiles.Length}: {pdfFiles[i]}");
+// }
 
+Console.WriteLine(GetPlainText(pdfFiles[0]));
+return;
 var env = DotEnv.Read();
 
 if (!env.TryGetValue("GOOGLE_API_KEY", out var apiKey) || string.IsNullOrWhiteSpace(apiKey))
