@@ -175,7 +175,7 @@ partial class Program
 
             var content = sb.ToString();
             if (content.Length > maxDocChars)
-                content = content.Substring(0, maxDocChars) + "\n�?�";
+                content = content.Substring(0, maxDocChars) + "\n";
 
             var id = $"table::{schema}.{table}";
             var tag = $"{schema}.{table}";
