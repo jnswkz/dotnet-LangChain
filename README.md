@@ -1,39 +1,47 @@
-# dotnet-LangChain データアシスタント
+# dotnet-LangChain チャットボット
 
 ## 概要
-このリポジトリは、LangChain.NET と Google Generative Language API（Gemini）を組み合わせ、PostgreSQL データベースからメタデータとサンプル行を収集し、pgvector ベースのベクトルストアに取り込むアプリケーションです。アプリのゴールは、**データベース内の情報を読みやすい形に要約・検索し、LLM から自然言語で問合せできるようにする**ことです。今後はソースコード全体も同じ仕組みで埋め込み、技術ドキュメントのように扱えるよう発展させる予定です。
+- .NET 9 で動く RAG チャットボット。PostgreSQL のメタデータと PDF テキストをベクトル化し、Gemini 2.5 Pro へコンテキストとして渡します。
+- pgvector 拡張を使い、`kb_docs` テーブルに埋め込みを保存します。
+- 回答はベトナム語で、コンテキストの出典を付けて返します。
 
-## 主な構成
+## 必要なもの
+- .NET 9 SDK
+- PostgreSQL + pgvector 拡張が有効な DB
+- 環境変数: `GOOGLE_API_KEY`, `AZURE_POSTGRES_URL`
+- PDF を置くフォルダ: `./pdfs/` (存在しない場合は作成してください)
+
+## セットアップ
+1) `.env` にキーを設定  
+```
+GOOGLE_API_KEY=your_gemini_key
+AZURE_POSTGRES_URL=postgres://user:pass@host:port/db
+```
+2) 依存関係は `dotnet restore` で取得  
+3) `dotnet run` で起動
+
+## 仕組み
 - `Program.cs`  
-  - .env から API キーと DB 接続文字列を読み込み、Google Chat Model を初期化し、RAG パイプラインを実行します。
-- `data.cs`（`partial class Program`）  
-  - `SyncVectorStoreAsync` が DB スキャン、ベクトルストア作成、埋め込み生成、pgvector への upsert を統括します。
-  - Postgres からテーブル構造とサンプル行を抽出するユーティリティを保持します。
+  - `.env` 読み込み、PDF のプレーンテキストを確認後、Gemini と Postgres 接続を初期化し、ベクトル同期と Q&A ループを実行
+- `data.cs`  
+  - `SyncVectorStoreAsync`: DB メタデータをドキュメント化し埋め込み→`kb_docs` に upsert  
+  - `SimilaritySearchAsync`: クエリ埋め込みとの距離で上位コンテキストを取得
 - `embbeding.cs`  
-  - Gemini の埋め込み API を呼び出すモジュール。単体/バッチ埋め込み、正規化など、DB 用・ソースコード用で共有したい処理をまとめています。
-- `dotnet-LangChain.csproj`  
-  - .NET 9 をターゲットにしたコンソール アプリケーション。
+  - Google text-embedding-004 で単発/バッチ埋め込みを生成し正規化
+- `pdf.cs`  
+  - `ReadPdfFile`: `./pdfs` から PDF リストを取得  
+  - `GetPlainText`: PdfPig で PDF テキスト抽出（スキャン PDF は別途 OCR が必要）
 
-## 使い方（現在のフロー）
-1. `.env` に `GOOGLE_API_KEY` と `AZURE_POSTGRES_URL` を設定します。
-2. `dotnet run` を実行すると、アプリが以下を自動実行します。  
-   - DB からテーブル一覧・カラム情報・サンプル行を抽出し `Doc` に整形。  
-   - Google の埋め込み API で文脈をベクトル化して `kb_docs` テーブルへ upsert。  
-   - 例題クエリを RAG で投げ、Gemini から回答を取得。
-3. 実際のユースケースでは、CLI で任意の質問（日本語/英語）を入力し、データベースに存在する知識を元に自然言語で回答を返します。
+## PDF 取り込みの流れ
+1) `./pdfs` に PDF を配置  
+2) `GetPlainText` でテキスト抽出（抽出できない場合は OCR でテキスト化してから利用）  
+3) テキストをチャンク分割し、`EmbedAsyncBatch` → `UpsertDocsAsync` で `kb_docs` に保存  
+4) 質問時に PDF 由来のチャンクも検索対象となり、コンテキストとして LLM に渡されます
 
-## ソースコード連携（今後の拡張）
-- `embbeding.cs` を使ってソースコードの分割・埋め込み・ベクトル格納を共通化し、レポジトリ内ファイルをまたいだ検索や「コードベース Q&A」を提供する予定です。
-- ソースファイルのチャンク生成・メタデータ付与・差分アップサート用に、`SyncSourceCodeAsync` のような関数を追加する計画です。
-- 将来的には DB + ソースコードのハイブリッド検索を行い、アプリ利用者が「仕様の確認」「実装場所の特定」「データとコードの突合せ」を一つの会話で完結できる体験を目指します。
+## 実行と確認
+- `dotnet run` 実行後、プロンプトに質問を入力すると、DB と PDF のコンテキストを用いた回答が返ります。
+- ベクトルテーブルや PDF を変えた場合は再度 `dotnet run` して再インデックスしてください。
 
-## 期待されるユースケース
-- データベースの構造やテーブル間関係を素早く把握したいとき。
-- サンプル行を見ながら、ダッシュボード作成や分析に必要な列を確認したいとき。
-- （今後）リポジトリのコード全体を自然言語で検索し、具体的な実装例や参照元を知りたいとき。
-
-## 今後のロードマップ
-1. ソースコード埋め込みモジュールの実装と CLI からの問い合わせ統合。  
-2. RAG プロンプトを多言語（英語/日本語/ベトナム語）に対応させる追加ガイド。  
-3. CLI 以外のフロントエンド（例: Web UI）を通じたインタラクティブな会話環境。  
-4. ベクトルストアの更新差分検知やジョブ化による運用最適化。
+## 注意
+- スキャン PDF は `GetPlainText` では抽出できません。OCR でテキスト化してから `./pdfs` に置いてください。
+- コンテキストに取り込む情報に秘密情報が含まれないようご注意ください。

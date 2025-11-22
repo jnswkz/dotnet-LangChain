@@ -5,14 +5,14 @@ using System.IO;
 
 DotEnv.Load();
 
-var pdfFiles = ReadPdfFile();
-// for (var i = 0; i < pdfFiles.Length; i++)
-// {
-//     Console.WriteLine($"PDF File {i + 1}/{pdfFiles.Length}: {pdfFiles[i]}");
-// }
-
-Console.WriteLine(GetPlainText(pdfFiles[0]));
-return;
+// var pdfFiles = ReadPdfFile();
+// // for (var i = 0; i < pdfFiles.Length; i++)
+// // {
+// //     Console.WriteLine($"PDF File {i + 1}/{pdfFiles.Length}: {pdfFiles[i]}");
+// // }
+// // open output.txt and write
+// await File.WriteAllTextAsync("output.txt", await ExtractPdfTextWithOcrFallbackAsync(pdfFiles[0]));
+// return;
 var env = DotEnv.Read();
 
 if (!env.TryGetValue("GOOGLE_API_KEY", out var apiKey) || string.IsNullOrWhiteSpace(apiKey))
@@ -50,6 +50,13 @@ if (!ingested)
 {
     return;
 }
+
+var pdfIngested = IngestPdfsAsync(connectionString, apiKey, httpClient);
+if (pdfIngested == null)
+{
+    return;
+}
+
 
 
 // --- 4) RAG Q&A ---

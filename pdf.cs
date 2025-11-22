@@ -4,7 +4,9 @@ using System.Collections.Generic;
 using System.Text;
 using UglyToad.PdfPig;
 using UglyToad.PdfPig.DocumentLayoutAnalysis.TextExtractor;
-
+using UglyToad.PdfPig.Graphics.Colors;
+using UglyToad.PdfPig.Rendering.Skia;
+using Tesseract;
 partial class Program
 {
     protected static string[] ReadPdfFile()
@@ -39,27 +41,91 @@ partial class Program
         {
             return sb.ToString();
         }
-
-        // Pass 2: OCR per page
-        var ocrSb = new StringBuilder();
-        int pageIndex = 0;
-        foreach (var page in doc.GetPages())
+        else
         {
-            pageIndex++;
-            // render page to image bytes/stream (depends on your renderer)
-            // var image = RenderPageToPng(page);
-            // var ocrText = await RunOcrAsync(image);
-            var ocrText = await RunOcrAsyncFallback(page); // placeholder
-            if (!string.IsNullOrWhiteSpace(ocrText))
-                ocrSb.AppendLine(ocrText);
+            return ExtractOcrTextFromPdf(filePath);
         }
 
-        return ocrSb.Length > 0 ? ocrSb.ToString() : string.Empty;
     }
 
-    // Placeholder: wire this to your OCR of choice (Tesseract CLI or cloud service).
-    private static Task<string> RunOcrAsyncFallback(object renderedPage)
+    // --- OCR extraction using Tesseract ---
+    public static string ExtractOcrTextFromPdf(
+        string pdfPath,
+        string tessdataPath = "C:\\Program Files\\Tesseract-OCR\\tessdata",
+        string lang = "vie",
+        float scale = 2.0f)
     {
-        throw new NotImplementedException("Connect to OCR (e.g., Tesseract or cloud API) here.");
+        using var engine = new TesseractEngine(tessdataPath, lang, EngineMode.Default);
+        var sb = new StringBuilder();
+        using var document = PdfDocument.Open(pdfPath, SkiaRenderingParsingOptions.Instance);
+        document.AddSkiaPageFactory();
+
+        for (int pageNum = 1; pageNum <= document.NumberOfPages; pageNum++)
+        {
+            using var pngStream = document.GetPageAsPng(pageNum, scale);
+            var pngBytes = pngStream.ToArray();
+
+            using var pix = Pix.LoadFromMemory(pngBytes);
+            using var page = engine.Process(pix);
+
+            var text = page.GetText();
+
+            sb.AppendLine($"===== PAGE {pageNum} =====");
+            sb.AppendLine(text);
+            sb.AppendLine();
+        }
+        return sb.ToString();
+    }   
+
+    private static List<string> ChunkTExt(string text, int chunkSize = 1000, int overlap = 200)
+    {
+        var chunks = new List<string>();
+        int start = 0;
+        while (start < text.Length)
+        {
+            int end = Math.Min(start + chunkSize, text.Length);
+            chunks.Add(text.Substring(start, end - start));
+            start += chunkSize - overlap;
+        }
+        return chunks;
+    }
+    
+
+    private static void IngestPdfsAsync(string connectionString, string apiKey, HttpClient http)
+    {
+        var pdfFiles = ReadPdfFile();
+        if (pdfFiles.Length == 0)
+        {
+            Console.WriteLine("No PDF files found in the 'pdfs' directory.");
+            return;
+        }
+
+        var docs = new List<Doc>();
+        foreach (var pdfFile in pdfFiles)
+        {
+            Console.WriteLine($"Processing PDF: {pdfFile}");
+            var text = ExtractPdfTextWithOcrFallbackAsync(pdfFile).Result;
+            var chunks = ChunkTExt(text);
+            
+            int i = 0;
+            foreach (var chunk in chunks)
+            {
+                docs.Add(new Doc($"pdf::{Path.GetFileName(pdfFile)}::{i}", chunk, $"pdf:{pdfFile}#chunk{i}"));
+                i++;
+            }
+        }
+        if (docs.Count == 0)
+        {
+            Console.WriteLine("No PDF text to ingest."); return false; 
+        }
+
+        var sampleVec = await EmbedAsyncSingle(apiKey, "probe", http);
+        await EnsureKbTableAsync(connectionString, sampleVec.Length, "kb_docs");
+
+        var embeds = await EmbedAsyncBatch(apiKey, docs.Select(d => d.Content), http);
+        var kbDocs = docs.Select((d, idx) => new KbDoc(d.Id, d.Content, d.Metadata, Normalize(embeds[idx]))).ToList();
+        await UpsertDocsAsync(connectionString, kbDocs, "kb_docs");
+        Console.WriteLine($"Ingested {kbDocs.Count} PDF chunks.");
+        return true;
     }
 }

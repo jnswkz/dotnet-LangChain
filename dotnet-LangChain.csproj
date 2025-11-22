@@ -19,6 +19,9 @@
     <PackageReference Include="Mscc.GenerativeAI" Version="2.9.1" />
     <PackageReference Include="Npgsql" Version="9.0.4" />
     <PackageReference Include="PdfPig" Version="0.1.12" />
+    <PackageReference Include="PdfPig.Rendering.Skia" Version="0.1.12.1" />
+    <PackageReference Include="SkiaSharp" Version="3.119.1" />
+    <PackageReference Include="Tesseract" Version="5.2.0" />
   </ItemGroup>
 
 </Project>
