@@ -1,5 +1,5 @@
 // Debug script to search for specific content in kb_docs
-// Run with: dotnet run -- debug
+// Run with: DEBUG_SEARCH=1 dotnet run
 
 using dotenv.net;
 using Npgsql;
@@ -22,7 +22,7 @@ public class DebugSearch
         await using var conn = new NpgsqlConnection(cs);
         await conn.OpenAsync();
 
-        Console.WriteLine("\n=== SEARCHING FOR: số tín chỉ đăng ký học kỳ ===\n");
+        Console.WriteLine("\n=== SEARCHING FOR: credit registration per semester ===\n");
 
         // Search 1: Find documents with "tín chỉ" and "đăng ký"
         var sql1 = @"
@@ -33,7 +33,7 @@ WHERE content ILIKE '%tín chỉ%đăng ký%'
 ORDER BY id
 LIMIT 15;
 ";
-        Console.WriteLine("=== Query 1: tín chỉ + đăng ký ===");
+        Console.WriteLine("=== Query 1: credits + registration ===");
         await RunQueryAsync(conn, sql1);
 
         // Search 2: Find documents specifically about minimum/maximum credits
@@ -83,7 +83,7 @@ WHERE content ILIKE '%khối lượng học tập%'
 ORDER BY id
 LIMIT 10;
 ";
-        Console.WriteLine("\n=== Query 5: khối lượng học tập / giới hạn tín chỉ ===");
+        Console.WriteLine("\n=== Query 5: study load / credit limits ===");
         await RunQueryAsync(conn, sql5);
     }
 

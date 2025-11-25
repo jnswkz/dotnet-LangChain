@@ -91,7 +91,7 @@ if (runDebug)
 if (runTest)
 {
     Console.WriteLine("\n🧪 RUNNING TEST MODE...\n");
-    var qaService = new QAService(connectionString, apiKey, httpClient, geminiModel);
+    var testQaService = new QAService(connectionString, apiKey, httpClient, geminiModel);
     
     var testFilePath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "test_quest.txt");
     if (!File.Exists(testFilePath))
@@ -101,106 +101,70 @@ if (runTest)
     
     var outputPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "test_results.md");
     
-    await TestRunner.RunTestsAsync(testFilePath, qaService, outputPath);
+    await TestRunner.RunTestsAsync(testFilePath, testQaService, outputPath);
     return;
 }
 
-// --- 4) RAG Q&A ---
-var question = "Số tín chỉ tối thiểu và tối đa sinh viên được đăng ký học trong mỗi học kỳ chính là bao nhiêu?";
+// --- CHECK FOR API MODE ---
+var runApi = (env.TryGetValue("RUN_API", out var apiFlag) && string.Equals(apiFlag, "1", StringComparison.OrdinalIgnoreCase))
+             || string.Equals(Environment.GetEnvironmentVariable("RUN_API"), "1", StringComparison.OrdinalIgnoreCase);
 
-Console.Write("\nEnter your question: ");
-Console.WriteLine($"\nYou> {question}");
-
-// Use RETRIEVAL_QUERY task type for questions (better semantic matching)
-var qVec = Normalize(await EmbedAsyncSingle(apiKey, question, httpClient, isQuery: true));
-var hits = await HybridSearchAsync(connectionString, question, qVec, k: 10, table: "kb_docs");
-
-
-
-// handle no hits
-if (hits.Count == 0 )
+var apiPort = 5001;
+if (env.TryGetValue("API_PORT", out var portStr) && int.TryParse(portStr, out var parsedPort))
 {
-
-    var systemPrompt = @"
-Bạn là trợ lý ảo tích hợp trong ứng dụng học vụ của Trường Đại học Công nghệ Thông Tin.
-
-Vai trò của bạn:
-- Hỗ trợ sinh viên, giảng viên và cán bộ hiểu và sử dụng ứng dụng học vụ.
-- Giải thích các quy chế, quy định, quy trình liên quan đến đào tạo, học vụ, điểm số, kết quả học tập... dựa trên các tài liệu mà hệ thống đã index.
-- Hướng dẫn người dùng cách khai thác các chức năng chính của ứng dụng (xem điểm, xem kết quả học tập, xem thông tin cá nhân, tra cứu quy chế...).
-
-Nguyên tắc trả lời:
-- Khi người dùng hỏi chung chung như “bạn có thể giúp tôi gì”, hãy liệt kê một cách ngắn gọn, rõ ràng các nhóm chức năng bạn hỗ trợ, tập trung vào:
-- Giải thích quy chế, quy định đào tạo, học vụ.
-- Hỗ trợ hiểu cấu trúc dữ liệu và thông tin có trong hệ thống (điểm số, kết quả học tập, thông tin sinh viên...).
-- Gợi ý những kiểu câu hỏi mà người dùng có thể hỏi.
-- Khi câu hỏi quá chi tiết về dữ liệu cá nhân (ví dụ điểm của một sinh viên cụ thể) thì hãy giải thích rằng bạn KHÔNG trực tiếp truy vấn dữ liệu thời gian thực, mà chỉ hỗ trợ giải thích quy định và cấu trúc hệ thống.
-- Trả lời bằng cùng ngôn ngữ với câu hỏi (nếu người dùng dùng tiếng Việt thì trả lời tiếng Việt).
-- Ưu tiên trả lời ngắn gọn, rõ ràng, có thể dùng bullet khi phù hợp.
-";
-
-    var generalResp = await geminiModel.GenerateAsync(new ChatRequest
-    {
-        Messages = new List<Message>
-        {
-            new(systemPrompt, MessageRole.System, string.Empty),
-            Message.Human(question)
-        }
-    }, new ChatSettings { User = "general-mode", UseStreaming = false });
-
-    Console.WriteLine("\nAssistant> " + (generalResp.LastMessageContent ?? "(no content)"));
-}
-else {
-
-    var ctx   = string.Join("\n---\n", hits.Select(h =>
-        $"[Source: {h.Metadata ?? "unknown"} | score={h.Score:F4}]\n{TrimForPrompt(h.Content, 1200)}"));
-    Console.WriteLine("\n====== RAG CONTEXT DÙNG CHO CÂU HỎI NÀY ======\n");
-    Console.WriteLine(ctx);
-    Console.WriteLine("\n==============================================\n");
-    
-    // Build context with source grouping for better comprehension
-    var groupedContext = GroupContextBySources(hits.Take(8).ToList());
-    
-    var prompt = $@"
-BẠN LÀ CHUYÊN GIA TƯ VẤN HỌC VỤ của Trường Đại học Công nghệ Thông tin (UIT).
-
-NHIỆM VỤ: Trả lời câu hỏi của sinh viên dựa trên các quy chế, quy định chính thức được cung cấp bên dưới.
-
-NGUYÊN TẮC TRẢ LỜI:
-1. CHỈ sử dụng thông tin từ CONTEXT bên dưới - KHÔNG được tự suy diễn hoặc thêm thông tin
-2. Nếu CONTEXT chứa thông tin trực tiếp trả lời được câu hỏi → Trả lời đầy đủ, chính xác
-3. Nếu CONTEXT chỉ có một phần thông tin → Trả lời phần có thể, ghi rõ ""phần này chưa được nêu trong tài liệu""
-4. Nếu CONTEXT không có thông tin liên quan → Trả lời: ""Mình không có thông tin để trả lời câu hỏi này.""
-5. Trích dẫn điều khoản cụ thể khi có (VD: ""Theo Điều 15..."")
-6. Dùng bullet points cho danh sách điều kiện
-7. Trả lời bằng tiếng Việt, văn phong thân thiện
-10. Không cần phải đưa ra tên file tài liệu gốc mà nếu có thể hãy đoán tên tài liệu dựa trên tên file
-
-CONTEXT (Trích từ quy chế đào tạo):
-{groupedContext}
-
-CÂU HỎI: {question}
-
-TRẢ LỜI:";
-
-    var resp = await geminiModel.GenerateAsync(new ChatRequest
-    {
-        Messages = new List<Message>
-        {
-            new(
-                "Bạn là chuyên gia tư vấn học vụ. Chỉ trả lời dựa trên thông tin được cung cấp. " +
-                "Không bao giờ bịa thông tin. Nếu không chắc chắn, hãy nói rõ.",
-                MessageRole.System,
-                string.Empty),
-            Message.Human(prompt)
-        }
-    }, new ChatSettings { User = "db-rag", UseStreaming = false });
-
-    Console.WriteLine("\nAssistant> " + (resp.LastMessageContent ?? "(no content)"));
-    Console.WriteLine("\nDone.");
+    apiPort = parsedPort;
 }
 
-// Helper method to group context by source documents
+var qaService = new QAService(connectionString, apiKey, httpClient, geminiModel);
+
+if (runApi)
+{
+    var chatApi = new ChatApi(qaService);
+    await chatApi.StartAsync(apiPort);
+    return;
+}
+
+// --- INTERACTIVE MODE ---
+Console.WriteLine("\n💬 Interactive Chat Mode");
+Console.WriteLine("Type your question, 'api' to start API server, or 'exit' to quit\n");
+
+while (true)
+{
+    Console.Write("You> ");
+    var input = Console.ReadLine();
+
+    if (string.IsNullOrWhiteSpace(input))
+        continue;
+
+    if (input.Equals("exit", StringComparison.OrdinalIgnoreCase))
+        break;
+
+    if (input.Equals("api", StringComparison.OrdinalIgnoreCase))
+    {
+        var chatApi = new ChatApi(qaService);
+        await chatApi.StartAsync(apiPort);
+        break;
+    }
+
+    try
+    {
+        var result = await qaService.AnswerQuestionAsync(input, showContext: true);
+        
+        if (result.HasContext && result.Context != null)
+        {
+            Console.WriteLine("\n====== RAG CONTEXT ======");
+            Console.WriteLine(result.Context);
+        }
+        
+        Console.WriteLine("\n====== ANSWER ======");
+        Console.WriteLine(result.Answer);
+        Console.WriteLine($"\n⏱️ Hits: {result.HitCount} | Top Score: {result.TopScore:F4}\n");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"\n❌ Error: {ex.Message}\n");
+    }
+}
 static string GroupContextBySources(List<KbHit> hits)
 {
     var grouped = hits

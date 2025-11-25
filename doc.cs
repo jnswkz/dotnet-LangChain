@@ -49,15 +49,15 @@ partial class Program
     }
 
     /// <summary>
-    /// Extract structured content from DOCX with heading detection
-    /// Tables are now processed inline to preserve their context with preceding headings
+    /// Extract structured content from DOCX with heading detection.
+    /// Tables are processed inline to preserve their context with preceding headings.
     /// </summary>
     protected static List<(string Text, bool IsHeading, int Level)> GetStructuredTextFromDocx(string filePath)
     {
         using var document = DocX.Load(filePath);
         var elements = new List<(string Text, bool IsHeading, int Level)>();
         
-        // Track table references to detect "Bảng X" labels
+        // Track table references to detect "Table X" labels
         string? pendingTableLabel = null;
 
         // Process paragraphs with heading detection

@@ -3,7 +3,7 @@ using LangChain.Providers.Google;
 using System.Text;
 
 /// <summary>
-/// Service để trả lời câu hỏi sử dụng RAG
+/// Service for answering questions using RAG (Retrieval-Augmented Generation)
 /// </summary>
 public class QAService
 {
@@ -21,21 +21,21 @@ public class QAService
     }
 
     /// <summary>
-    /// Trả lời một câu hỏi sử dụng RAG
+    /// Answer a question using RAG
     /// </summary>
-    /// <param name="question">Câu hỏi cần trả lời</param>
-    /// <param name="showContext">Hiển thị context hay không</param>
-    /// <returns>Tuple chứa (câu trả lời, context được sử dụng, số hits tìm được)</returns>
+    /// <param name="question">The question to answer</param>
+    /// <param name="showContext">Whether to include context in the result</param>
+    /// <returns>QAResult containing the answer, context used, and hit count</returns>
     public async Task<QAResult> AnswerQuestionAsync(string question, bool showContext = false)
     {
         var result = new QAResult { Question = question };
 
         try
         {
-            // Embed câu hỏi
+            // Embed the question
             var qVec = Program.Normalize(await Program.EmbedAsyncSingle(_apiKey, question, _httpClient, isQuery: true));
             
-            // Tìm kiếm hybrid
+            // Hybrid search
             var hits = await Program.HybridSearchAsync(_connectionString, question, qVec, k: 10, table: "kb_docs");
             result.HitCount = hits.Count;
 
@@ -46,7 +46,7 @@ public class QAService
             }
             else
             {
-                // Lưu context
+                // Save context
                 if (showContext)
                 {
                     result.Context = string.Join("\n---\n", hits.Select(h =>
@@ -173,7 +173,7 @@ TRẢ LỜI:";
 }
 
 /// <summary>
-/// Kết quả trả lời câu hỏi
+/// Result of a question-answering operation
 /// </summary>
 public class QAResult
 {

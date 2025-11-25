@@ -10,12 +10,7 @@ using Npgsql;
 
 partial class Program
 {
-    /// <summary>
-    /// Scans Postgres metadata, ensures the vector store exists, and ingests the latest docs.
-    /// Returns true if ingestion ran (false when no user tables are found).
-    /// </summary>
-    /// 
-    /// 
+
     public static async Task ClearVectorStoreAsync(string connectionString)
     {
         await using var conn = new NpgsqlConnection(connectionString);
@@ -26,7 +21,7 @@ partial class Program
         await using var cmd = new NpgsqlCommand(sql, conn);
         await cmd.ExecuteNonQueryAsync();
 
-        Console.WriteLine("✅ Vector store cleared (kb_docs).");
+        Console.WriteLine("Vector store cleared (kb_docs).");
     }
     public static async Task<bool> SyncVectorStoreAsync(
         string connectionString,
@@ -265,7 +260,6 @@ partial class Program
         {
             if (i > 0) sb.Append(",");
 
-            // tsv được build trực tiếp từ content{i} ngay trong SQL
             sb.Append($"(@id{i}, @content{i}, @meta{i}, @emb{i}::vector, to_tsvector('simple', @content{i}))");
         }
 
@@ -330,23 +324,23 @@ private static string ExpandVietnameseQuery(string question)
     // Vietnamese academic term synonyms and expansions
     var synonyms = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
     {
-        // === TỐT NGHIỆP & XẾP LOẠI (Q14-Q17) ===
+        // === GRADUATION & CLASSIFICATION (Q14-Q17) ===
         { "tốt nghiệp", new[] { "tốt nghiệp", "hoàn thành", "ra trường", "cấp bằng", "công nhận tốt nghiệp", "xét tốt nghiệp", "Điều 32", "Điều 33" } },
         { "xét tốt nghiệp", new[] { "xét tốt nghiệp", "công nhận tốt nghiệp", "điều kiện tốt nghiệp", "đợt xét", "Điều 32" } },
         { "xếp loại", new[] { "xếp loại", "xếp loại tốt nghiệp", "xuất sắc", "giỏi", "khá", "trung bình", "Điều 33" } },
         { "xuất sắc", new[] { "xuất sắc", "xếp loại xuất sắc", "giảm bậc", "Điều 33" } },
         
-        // === ĐIỂM SỐ & ĐTBCTL (Q8, Q18, Q19) ===
+        // === SCORES & GPA (Q8, Q18, Q19) ===
         { "điểm", new[] { "điểm", "điểm số", "thang điểm", "điểm trung bình", "ĐTBHK", "điểm trung bình học kỳ", "Điều 24" } },
         { "ĐTBCTL", new[] { "ĐTBCTL", "điểm trung bình chung tích lũy", "điểm trung bình tích lũy", "xếp hạng tốt nghiệp", "Điều 24" } },
         { "điểm trung bình", new[] { "điểm trung bình", "ĐTBHK", "ĐTBC", "ĐTBCTL", "Điều 24" } },
         { "điểm I", new[] { "điểm I", "điểm M", "điểm BL", "không tính", "Điều 24" } },
         { "điểm cuối kỳ", new[] { "điểm cuối kỳ", "điểm giữa kỳ", "thay thế", "điểm thi" } },
         
-        // === HỌC PHÍ ===
+        // === TUITION FEES ===
         { "học phí", new[] { "học phí", "đóng học phí", "miễn giảm học phí", "phí", "hoàn thành học phí" } },
         
-        // === TÍN CHỈ & ĐĂNG KÝ (Q2, Q5, Q6, Q7, Q21) ===
+        // === CREDITS & REGISTRATION (Q2, Q5, Q6, Q7, Q21) ===
         { "tín chỉ", new[] { "tín chỉ", "số tín chỉ", "đăng ký tín chỉ", "tín chỉ tối thiểu", "tín chỉ tối đa", "đăng ký học", "Điều 14", "Điều 4", "Điều 7" } },
         { "đăng ký", new[] { "đăng ký", "đăng ký học", "đăng ký tín chỉ", "đăng ký học tập", "đăng ký học phần", "Điều 14" } },
         { "tối thiểu", new[] { "tối thiểu", "ít nhất", "tối đa", "nhiều nhất", "giới hạn", "số tín chỉ đăng ký" } },
@@ -355,7 +349,7 @@ private static string ExpandVietnameseQuery(string question)
         { "học lại", new[] { "học lại", "học phần học lại", "đăng ký học lại", "Điều 3" } },
         { "học vượt", new[] { "học vượt", "đăng ký học vượt", "học phần mới", "học kỳ hè", "Điều 14" } },
         
-        // === HỌC KỲ & THỜI GIAN (Q1, Q3, Q4) ===
+        // === SEMESTER & TIME (Q1, Q3, Q4) ===
         { "học kỳ", new[] { "học kỳ", "học kỳ chính", "học kỳ hè", "kỳ học", "semester", "Điều 5" } },
         { "học kỳ hè", new[] { "học kỳ hè", "kỳ hè", "hè", "12 tín chỉ", "Điều 14" } },
         { "tuần", new[] { "tuần", "tuần thực học", "tuần học", "Điều 5" } },
@@ -365,13 +359,13 @@ private static string ExpandVietnameseQuery(string question)
         { "văn bằng", new[] { "văn bằng", "văn bằng 1", "văn bằng 2", "cử nhân", "Điều 6" } },
         { "chương trình đào tạo", new[] { "chương trình đào tạo", "CTĐT", "chương trình", "Điều 7" } },
         
-        // === KHÓA LUẬN TỐT NGHIỆP (Q12, Q13) ===
+        // === THESIS / CAPSTONE PROJECT (Q12, Q13) ===
         { "khóa luận", new[] { "khóa luận", "luận văn", "đồ án tốt nghiệp", "KLTN", "Điều 31", "Điều 10" } },
         { "đồ án", new[] { "đồ án", "khóa luận", "đồ án tốt nghiệp", "ĐATN", "Điều 31" } },
         { "bảo vệ", new[] { "bảo vệ", "bảo vệ khóa luận", "hội đồng bảo vệ", "ra bảo vệ", "Điều 10" } },
         { "hết thời gian", new[] { "hết thời gian", "gia hạn", "không ra bảo vệ", "Điều 10" } },
         
-        // === CẢNH BÁO HỌC VỤ (Q9, Q10) ===
+        // === ACADEMIC WARNING (Q9, Q10) ===
         { "cảnh báo", new[] { "cảnh báo", "cảnh báo học vụ", "xử lý học vụ", "Điều 16" } },
         { "cảnh báo học vụ", new[] { "cảnh báo học vụ", "cảnh báo", "xử lý học vụ", "ĐTBHK dưới", "điểm trung bình dưới", "Điều 16" } },
         { "đình chỉ", new[] { "đình chỉ", "đình chỉ học tập", "buộc thôi học", "thi hộ", "vi phạm kỷ luật", "Điều 16" } },
@@ -382,11 +376,11 @@ private static string ExpandVietnameseQuery(string question)
         { "xử lý học vụ", new[] { "xử lý học vụ", "cảnh báo học vụ", "đình chỉ", "buộc thôi học", "Điều 16" } },
         { "vi phạm", new[] { "vi phạm", "vi phạm kỷ luật", "kỷ luật", "thi hộ", "gian lận" } },
         
-        // === SONG NGÀNH (Q11, Q40) ===
+        // === DUAL DEGREE (Q11, Q40) ===
         { "song ngành", new[] { "song ngành", "ngành thứ hai", "hai ngành", "chương trình thứ hai", "đào tạo song ngành" } },
         { "ngành thứ hai", new[] { "ngành thứ hai", "song ngành", "chương trình thứ hai", "học thêm ngành" } },
         
-        // === NGOẠI NGỮ (Q22-Q38) ===
+        // === FOREIGN LANGUAGE (Q22-Q38) ===
         { "ngoại ngữ", new[] { "ngoại ngữ", "tiếng Anh", "tiếng Nhật", "TOEIC", "IELTS", "chuẩn ngoại ngữ", "chuẩn đầu ra" } },
         { "tiếng Anh", new[] { "tiếng Anh", "Anh văn", "ENG01", "ENG02", "ENG03", "English", "ngoại ngữ" } },
         { "tiếng Nhật", new[] { "tiếng Nhật", "Nhật ngữ", "JLPT", "N3", "Việt - Nhật", "CLC" } },
@@ -400,7 +394,7 @@ private static string ExpandVietnameseQuery(string question)
         { "chương trình chuẩn", new[] { "chương trình chuẩn", "CTC", "chương trình đại trà" } },
         { "chương trình tài năng", new[] { "chương trình tài năng", "CTTN", "tài năng" } },
         
-        // === ĐIỀU KIỆN & QUY TRÌNH ===
+        // === REQUIREMENTS & PROCEDURES ===
         { "điều kiện", new[] { "điều kiện", "yêu cầu", "tiêu chuẩn", "quy định" } },
         { "quy trình", new[] { "quy trình", "thủ tục", "cách thức", "hướng dẫn" } },
         { "công nhận", new[] { "công nhận", "xác nhận", "chấp nhận", "xét công nhận" } },
@@ -472,39 +466,39 @@ base AS (
         CASE WHEN d.content ILIKE '%' || @q || '%' THEN 0.15 ELSE 0 END AS exact_boost,
         -- Boost for metadata/keyword matches - IMPROVED
         CASE 
-            -- Cảnh báo học vụ (Q9, Q10)
+            -- Academic warning (Q9, Q10)
             WHEN d.metadata ILIKE '%cảnh báo học vụ%' AND @q ILIKE '%cảnh báo%' THEN 0.25
             WHEN d.metadata ILIKE '%đình chỉ%' AND @q ILIKE '%đình chỉ%' THEN 0.2
             WHEN d.metadata ILIKE '%xử lý học vụ%' AND @q ILIKE '%học vụ%' THEN 0.2
             WHEN d.metadata ILIKE '%điều 16%' AND (@q ILIKE '%cảnh báo%' OR @q ILIKE '%đình chỉ%' OR @q ILIKE '%học vụ%') THEN 0.25
             
-            -- Đăng ký tín chỉ (Q5, Q6, Q7, Q21)
+            -- Credit registration (Q5, Q6, Q7, Q21)
             WHEN d.metadata ILIKE '%đăng ký học tập%' AND (@q ILIKE '%tín chỉ%' OR @q ILIKE '%đăng ký%') THEN 0.25
             WHEN d.metadata ILIKE '%điều 14%' AND (@q ILIKE '%tín chỉ%' OR @q ILIKE '%đăng ký%' OR @q ILIKE '%học kỳ hè%' OR @q ILIKE '%học cải thiện%' OR @q ILIKE '%học vượt%') THEN 0.25
             
-            -- Thời gian & Học kỳ (Q1, Q3, Q4)
+            -- Time & Semester (Q1, Q3, Q4)
             WHEN d.metadata ILIKE '%điều 6%' AND (@q ILIKE '%thời gian%' OR @q ILIKE '%hoàn thành%' OR @q ILIKE '%văn bằng%' OR @q ILIKE '%khóa học%') THEN 0.25
             WHEN d.metadata ILIKE '%điều 5%' AND (@q ILIKE '%tuần%' OR @q ILIKE '%học kỳ%' OR @q ILIKE '%đánh giá%') THEN 0.25
             WHEN d.metadata ILIKE '%điều 4%' AND (@q ILIKE '%tiết%' OR @q ILIKE '%tín chỉ học tập%' OR @q ILIKE '%lý thuyết%') THEN 0.25
             WHEN d.metadata ILIKE '%điều 7%' AND (@q ILIKE '%chương trình đào tạo%' OR @q ILIKE '%tổng số tín chỉ%') THEN 0.25
             
-            -- Khóa luận (Q12, Q13)
+            -- Thesis (Q12, Q13)
             WHEN d.metadata ILIKE '%điều 31%' AND (@q ILIKE '%khóa luận%' OR @q ILIKE '%KLTN%' OR @q ILIKE '%đồ án%') THEN 0.25
             WHEN d.metadata ILIKE '%điều 10%' AND d.metadata ILIKE '%KLTN%' AND (@q ILIKE '%hết thời gian%' OR @q ILIKE '%bảo vệ%') THEN 0.25
             
-            -- Tốt nghiệp (Q14, Q15, Q16, Q17)
+            -- Graduation (Q14, Q15, Q16, Q17)
             WHEN d.metadata ILIKE '%điều 32%' AND (@q ILIKE '%xét tốt nghiệp%' OR @q ILIKE '%đợt xét%' OR @q ILIKE '%công nhận tốt nghiệp%') THEN 0.25
             WHEN d.metadata ILIKE '%điều 33%' AND (@q ILIKE '%xếp loại%' OR @q ILIKE '%xuất sắc%' OR @q ILIKE '%giảm bậc%') THEN 0.25
             WHEN d.metadata ILIKE '%tốt nghiệp%' AND @q ILIKE '%tốt nghiệp%' THEN 0.15
             
-            -- Điểm (Q8, Q18, Q19, Q20)
+            -- Scores (Q8, Q18, Q19, Q20)
             WHEN d.metadata ILIKE '%điều 24%' AND (@q ILIKE '%ĐTBCTL%' OR @q ILIKE '%điểm trung bình%' OR @q ILIKE '%điểm I%' OR @q ILIKE '%điểm M%') THEN 0.25
             WHEN d.metadata ILIKE '%điều 3%' AND (@q ILIKE '%học lại%' OR @q ILIKE '%học phần%') THEN 0.2
             
-            -- Song ngành (Q11, Q40)
+            -- Dual degree (Q11, Q40)
             WHEN d.metadata ILIKE '%song ngành%' AND (@q ILIKE '%song ngành%' OR @q ILIKE '%ngành thứ hai%') THEN 0.25
             
-            -- Ngoại ngữ (Q22-Q38)
+            -- Foreign language (Q22-Q38)
             WHEN d.metadata ILIKE '%ngoại ngữ%' AND (@q ILIKE '%ngoại ngữ%' OR @q ILIKE '%tiếng Anh%' OR @q ILIKE '%TOEIC%' OR @q ILIKE '%IELTS%' OR @q ILIKE '%tiếng Nhật%') THEN 0.2
             WHEN d.metadata ILIKE '%điều 8%' AND (@q ILIKE '%chuẩn%' OR @q ILIKE '%ngoại ngữ%' OR @q ILIKE '%Anh văn%') THEN 0.2
             
@@ -514,12 +508,12 @@ base AS (
         END AS meta_boost,
         -- Boost for content containing key terms
         CASE 
-            -- Cảnh báo học vụ
+            -- Academic warning
             WHEN d.content ILIKE '%cảnh báo học vụ%' AND @q ILIKE '%cảnh báo%' THEN 0.2
             WHEN d.content ILIKE '%đình chỉ học tập%' AND @q ILIKE '%đình chỉ%' THEN 0.2
             WHEN d.content ILIKE '%ĐTBHK%' AND (@q ILIKE '%cảnh báo%' OR @q ILIKE '%điểm%') THEN 0.1
             
-            -- Tín chỉ đăng ký
+            -- Credit registration
             WHEN d.content ILIKE '%tín chỉ tối thiểu%' AND (@q ILIKE '%tín chỉ%' OR @q ILIKE '%tối thiểu%') THEN 0.2
             WHEN d.content ILIKE '%tín chỉ tối đa%' AND (@q ILIKE '%tín chỉ%' OR @q ILIKE '%tối đa%') THEN 0.2
             WHEN d.content ILIKE '%đăng ký học%' AND (@q ILIKE '%đăng ký%' OR @q ILIKE '%tín chỉ%') THEN 0.15
@@ -528,34 +522,34 @@ base AS (
             WHEN d.content ILIKE '%học cải thiện%' AND @q ILIKE '%cải thiện%' THEN 0.2
             WHEN d.content ILIKE '%học vượt%' AND @q ILIKE '%học vượt%' THEN 0.2
             
-            -- Thời gian & Học kỳ
+            -- Time & Semester
             WHEN d.content ILIKE '%thời gian tối đa%' AND (@q ILIKE '%thời gian%' OR @q ILIKE '%tối đa%') THEN 0.2
             WHEN d.content ILIKE '%tuần thực học%' AND @q ILIKE '%tuần%' THEN 0.25
             WHEN d.content ILIKE '%15 tiết%' AND (@q ILIKE '%tiết%' OR @q ILIKE '%lý thuyết%') THEN 0.25
             WHEN d.content ILIKE '%50 phút%' AND @q ILIKE '%tiết%' THEN 0.2
             WHEN d.content ILIKE '%120%' AND d.content ILIKE '%132%' AND @q ILIKE '%tổng số tín chỉ%' THEN 0.25
             
-            -- Khóa luận
+            -- Thesis
             WHEN d.content ILIKE '%khóa luận tốt nghiệp%' AND (@q ILIKE '%khóa luận%' OR @q ILIKE '%KLTN%') THEN 0.2
             WHEN d.content ILIKE '%không nợ quá%' AND @q ILIKE '%điều kiện%' AND @q ILIKE '%KLTN%' THEN 0.2
             WHEN d.content ILIKE '%gia hạn%' AND @q ILIKE '%hết thời gian%' THEN 0.2
             
-            -- Tốt nghiệp & Xếp loại
+            -- Graduation & Classification
             WHEN d.content ILIKE '%đợt xét%' AND @q ILIKE '%xét tốt nghiệp%' THEN 0.2
             WHEN d.content ILIKE '%xếp loại tốt nghiệp%' AND @q ILIKE '%xếp loại%' THEN 0.25
             WHEN d.content ILIKE '%xuất sắc%' AND d.content ILIKE '%giảm%' AND @q ILIKE '%xuất sắc%' THEN 0.25
             
-            -- Điểm
+            -- Scores
             WHEN d.content ILIKE '%ĐTBCTL%' AND @q ILIKE '%ĐTBCTL%' THEN 0.25
             WHEN d.content ILIKE '%điểm I%' AND @q ILIKE '%điểm I%' THEN 0.2
             WHEN d.content ILIKE '%điểm M%' AND @q ILIKE '%điểm M%' THEN 0.2
             WHEN d.content ILIKE '%học phần học lại%' AND @q ILIKE '%học lại%' THEN 0.25
             
-            -- Song ngành
+            -- Dual degree
             WHEN d.content ILIKE '%ngành thứ hai%' AND (@q ILIKE '%song ngành%' OR @q ILIKE '%ngành thứ hai%') THEN 0.25
             WHEN d.content ILIKE '%30 tín chỉ%' AND @q ILIKE '%song ngành%' THEN 0.2
             
-            -- Ngoại ngữ
+            -- Foreign language
             WHEN d.content ILIKE '%TOEIC%' AND @q ILIKE '%TOEIC%' THEN 0.2
             WHEN d.content ILIKE '%IELTS%' AND @q ILIKE '%IELTS%' THEN 0.2
             WHEN d.content ILIKE '%tiếng Nhật%' AND @q ILIKE '%tiếng Nhật%' THEN 0.25
@@ -637,7 +631,7 @@ private static List<KbHit> ReRankResults(List<KbHit> candidates, string question
             var matchedTerms = questionTerms.Count(t => contentLower.Contains(t));
             boost += matchedTerms * 0.02;
             
-            // STRONG boost for học vụ related content when asking about cảnh báo/đình chỉ
+            // STRONG boost for academic warning related content
             if (questionLower.Contains("cảnh báo") || questionLower.Contains("đình chỉ") || questionLower.Contains("học vụ"))
             {
                 if (contentLower.Contains("điều 16") || metadataLower.Contains("điều 16"))
@@ -652,7 +646,7 @@ private static List<KbHit> ReRankResults(List<KbHit> candidates, string question
                     boost += 0.1;
             }
             
-            // STRONG boost for đăng ký tín chỉ related content
+            // STRONG boost for credit registration related content
             if (questionLower.Contains("tín chỉ") || questionLower.Contains("đăng ký") || 
                 questionLower.Contains("tối thiểu") || questionLower.Contains("tối đa"))
             {
@@ -672,7 +666,7 @@ private static List<KbHit> ReRankResults(List<KbHit> candidates, string question
                     boost += 0.2;
             }
             
-            // BOOST for thời gian & học kỳ (Q1, Q3, Q4)
+            // BOOST for time & semester (Q1, Q3, Q4)
             if (questionLower.Contains("thời gian") || questionLower.Contains("tuần") || 
                 questionLower.Contains("tiết") || questionLower.Contains("văn bằng") ||
                 questionLower.Contains("khóa học"))
@@ -691,7 +685,7 @@ private static List<KbHit> ReRankResults(List<KbHit> candidates, string question
                     boost += 0.25;
             }
             
-            // BOOST for tổng số tín chỉ CTĐT (Q2)
+            // BOOST for total credits in curriculum (Q2)
             if (questionLower.Contains("tổng số tín chỉ") || questionLower.Contains("chương trình đào tạo") ||
                 questionLower.Contains("ctđt") || questionLower.Contains("120") || questionLower.Contains("132"))
             {
@@ -701,7 +695,7 @@ private static List<KbHit> ReRankResults(List<KbHit> candidates, string question
                     boost += 0.3;
             }
             
-            // BOOST for học cải thiện & học lại (Q7, Q21)
+            // BOOST for grade improvement & retake (Q7, Q21)
             if (questionLower.Contains("cải thiện") || questionLower.Contains("học lại") ||
                 questionLower.Contains("học vượt"))
             {
@@ -715,7 +709,7 @@ private static List<KbHit> ReRankResults(List<KbHit> candidates, string question
                     boost += 0.25;
             }
             
-            // BOOST for điểm & ĐTBCTL (Q8, Q18, Q19, Q20)
+            // BOOST for scores & GPA (Q8, Q18, Q19, Q20)
             if (questionLower.Contains("đtbctl") || questionLower.Contains("điểm trung bình") ||
                 questionLower.Contains("điểm i") || questionLower.Contains("điểm m") ||
                 questionLower.Contains("điểm bl"))
@@ -728,7 +722,7 @@ private static List<KbHit> ReRankResults(List<KbHit> candidates, string question
                     boost += 0.2;
             }
             
-            // BOOST for khóa luận (Q12, Q13)
+            // BOOST for thesis/capstone project (Q12, Q13)
             if (questionLower.Contains("khóa luận") || questionLower.Contains("kltn") ||
                 questionLower.Contains("đồ án") || questionLower.Contains("bảo vệ") ||
                 questionLower.Contains("luận văn"))
@@ -745,7 +739,7 @@ private static List<KbHit> ReRankResults(List<KbHit> candidates, string question
                     boost += 0.25;
             }
             
-            // BOOST for tốt nghiệp & xếp loại (Q14, Q15, Q16, Q17)
+            // BOOST for graduation & classification (Q14, Q15, Q16, Q17)
             if (questionLower.Contains("tốt nghiệp") || questionLower.Contains("xét tốt nghiệp") ||
                 questionLower.Contains("xếp loại") || questionLower.Contains("xuất sắc") ||
                 questionLower.Contains("giảm bậc"))
@@ -762,7 +756,7 @@ private static List<KbHit> ReRankResults(List<KbHit> candidates, string question
                     boost += 0.25;
             }
             
-            // BOOST for song ngành (Q11, Q40)
+            // BOOST for dual degree (Q11, Q40)
             if (questionLower.Contains("song ngành") || questionLower.Contains("ngành thứ hai") ||
                 questionLower.Contains("văn bằng 2") || questionLower.Contains("bằng kép"))
             {
@@ -774,7 +768,7 @@ private static List<KbHit> ReRankResults(List<KbHit> candidates, string question
                     boost += 0.2;
             }
             
-            // BOOST for ngoại ngữ (Q22-Q38)
+            // BOOST for foreign language (Q22-Q38)
             if (questionLower.Contains("ngoại ngữ") || questionLower.Contains("tiếng anh") ||
                 questionLower.Contains("tiếng nhật") || questionLower.Contains("toeic") ||
                 questionLower.Contains("ielts") || questionLower.Contains("anh văn") ||
@@ -815,14 +809,14 @@ private static List<KbHit> ReRankResults(List<KbHit> candidates, string question
                     boost += 0.25;
             }
             
-            // Boost for regulatory content when asking about điều kiện/quy định
+            // Boost for regulatory content when asking about conditions/requirements
             if ((questionLower.Contains("điều kiện") || questionLower.Contains("quy định")) 
                 && (contentLower.Contains("điều kiện") || contentLower.Contains("phải")))
             {
                 boost += 0.05;
             }
             
-            // Boost for procedure content when asking about quy trình
+            // Boost for procedure content when asking about process
             if (questionLower.Contains("quy trình") && 
                 (contentLower.Contains("bước") || contentLower.Contains("quy trình")))
             {
