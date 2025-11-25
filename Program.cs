@@ -125,7 +125,7 @@ if (runApi)
 }
 
 // --- INTERACTIVE MODE ---
-Console.WriteLine("\n💬 Interactive Chat Mode");
+Console.WriteLine("\nInteractive Chat Mode");
 Console.WriteLine("Type your question, 'api' to start API server, or 'exit' to quit\n");
 
 while (true)
@@ -158,11 +158,11 @@ while (true)
         
         Console.WriteLine("\n====== ANSWER ======");
         Console.WriteLine(result.Answer);
-        Console.WriteLine($"\n⏱️ Hits: {result.HitCount} | Top Score: {result.TopScore:F4}\n");
+        Console.WriteLine($"\nHits: {result.HitCount} | Top Score: {result.TopScore:F4}\n");
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"\n❌ Error: {ex.Message}\n");
+        Console.WriteLine($"\nError: {ex.Message}\n");
     }
 }
 static string GroupContextBySources(List<KbHit> hits)
@@ -174,7 +174,7 @@ static string GroupContextBySources(List<KbHit> hits)
     var sb = new System.Text.StringBuilder();
     foreach (var group in grouped)
     {
-        sb.AppendLine($"\n📄 {group.Key}:");
+        sb.AppendLine($"\n{group.Key}:");
         sb.AppendLine("─────────────────────");
         foreach (var hit in group.OrderByDescending(h => h.Score).Take(3))
         {
