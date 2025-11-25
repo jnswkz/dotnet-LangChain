@@ -2,12 +2,13 @@ using dotenv.net;
 using LangChain.Providers;
 using LangChain.Providers.Google;
 using System.IO;
+using System.Text;
 using Npgsql;
 
 DotEnv.Load();
 
-// Console.InputEncoding  = Encoding.UTF8;
-// Console.OutputEncoding = Encoding.UTF8;
+Console.InputEncoding  = Encoding.UTF8;
+Console.OutputEncoding = Encoding.UTF8;
 
 // var pdfFiles = ReadPdfFile();
 // // for (var i = 0; i < pdfFiles.Length; i++)
@@ -73,10 +74,39 @@ else
     Console.WriteLine("kb_docs already populated; skipping ingestion. Set FORCE_REINGEST=1 to refresh.");
 }
 
+// --- CHECK FOR TEST MODE ---
+// Check both .env and environment variable
+var runTest = (env.TryGetValue("RUN_TEST", out var testFlag) && string.Equals(testFlag, "1", StringComparison.OrdinalIgnoreCase))
+              || string.Equals(Environment.GetEnvironmentVariable("RUN_TEST"), "1", StringComparison.OrdinalIgnoreCase);
 
+var runDebug = (env.TryGetValue("DEBUG_SEARCH", out var debugFlag) && string.Equals(debugFlag, "1", StringComparison.OrdinalIgnoreCase))
+              || string.Equals(Environment.GetEnvironmentVariable("DEBUG_SEARCH"), "1", StringComparison.OrdinalIgnoreCase);
+
+if (runDebug)
+{
+    await DebugSearch.RunDebugAsync();
+    return;
+}
+
+if (runTest)
+{
+    Console.WriteLine("\n🧪 RUNNING TEST MODE...\n");
+    var qaService = new QAService(connectionString, apiKey, httpClient, geminiModel);
+    
+    var testFilePath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "test_quest.txt");
+    if (!File.Exists(testFilePath))
+    {
+        testFilePath = "test_quest.txt"; // fallback to current directory
+    }
+    
+    var outputPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "test_results.md");
+    
+    await TestRunner.RunTestsAsync(testFilePath, qaService, outputPath);
+    return;
+}
 
 // --- 4) RAG Q&A ---
-var question = "Điều kiện xét tốt nghiệp và công nhận tốt nghiệp";
+var question = "Số tín chỉ tối thiểu và tối đa sinh viên được đăng ký học trong mỗi học kỳ chính là bao nhiêu?";
 
 Console.Write("\nEnter your question: ");
 Console.WriteLine($"\nYou> {question}");

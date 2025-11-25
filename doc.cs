@@ -20,22 +20,20 @@ record EnhancedDocxChunk(
 
 partial class Program
 {
-    // Vietnamese heading patterns for academic regulations
+    // Vietnamese heading patterns for academic regulations - IMPROVED
     private static readonly Regex HeadingPatterns = new Regex(
-        @"^(Điều\s+\d+|Chương\s+[IVXLCDM\d]+|Mục\s+\d+|Khoản\s+\d+|Phần\s+[IVXLCDM\d]+|" +
+        @"(Điều\s+\d+[\.\:]|Chương\s+[IVXLCDM\d]+[\.\:]?|Mục\s+\d+[\.\:]?|Khoản\s+\d+[\.\:]?|Phần\s+[IVXLCDM\d]+[\.\:]?|" +
         @"CHƯƠNG\s+[IVXLCDM\d]+|MỤC\s+\d+|PHẦN\s+[IVXLCDM\d]+|" +
-        @"Điều\s+\d+\.|Khoản\s+\d+\.|" +
-        @"\d+\.\s+[A-ZĐÀÁẢÃẠ]|" +
-        @"[a-z]\)\s|[0-9]+\)|" +
-        @"I{1,3}\.|IV\.|VI{0,3}\.|IX\.|X{1,3}\.)",
+        @"\d+\.\s+[A-ZĐÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÈÉẺẼẸÊẾỀỂỄỆÌÍỈĨỊÒÓỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÙÚỦŨỤƯỨỪỬỮỰỲÝỶỸỴ]|" +
+        @"[a-z]\)\s+[A-ZĐÀÁẢÃẠ])",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
-    // Pattern to detect article/section numbers
+    // Pattern to detect article/section numbers - IMPROVED
     private static readonly Regex ArticlePattern = new Regex(
-        @"Điều\s+(\d+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        @"Điều\s+(\d+)[\.\:\s]?", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     
     private static readonly Regex ChapterPattern = new Regex(
-        @"Chương\s+([IVXLCDM\d]+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        @"Chương\s+([IVXLCDM\d]+)[\.\:\s]?", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     protected static string[] ReadDocFiles()
     {
@@ -52,17 +50,27 @@ partial class Program
 
     /// <summary>
     /// Extract structured content from DOCX with heading detection
+    /// Tables are now processed inline to preserve their context with preceding headings
     /// </summary>
     protected static List<(string Text, bool IsHeading, int Level)> GetStructuredTextFromDocx(string filePath)
     {
         using var document = DocX.Load(filePath);
         var elements = new List<(string Text, bool IsHeading, int Level)>();
+        
+        // Track table references to detect "Bảng X" labels
+        string? pendingTableLabel = null;
 
         // Process paragraphs with heading detection
         foreach (var p in document.Paragraphs)
         {
             var text = p.Text?.Trim();
             if (string.IsNullOrWhiteSpace(text)) continue;
+
+            // Check if this is a table label (e.g., "Bảng 4. ...")
+            if (Regex.IsMatch(text, @"^Bảng\s+\d+", RegexOptions.IgnoreCase))
+            {
+                pendingTableLabel = text;
+            }
 
             // Detect heading level based on style or pattern
             int headingLevel = DetectHeadingLevel(text);
@@ -71,110 +79,71 @@ partial class Program
             elements.Add((text, isHeading, headingLevel));
         }
 
-        // Process tables with context preservation
+        // Process tables - try to match with their labels
+        int tableIndex = 0;
         foreach (var table in document.Tables)
         {
+            tableIndex++;
             var tableContent = ExtractTableAsStructuredText(table);
             if (!string.IsNullOrWhiteSpace(tableContent))
             {
-                elements.Add(($"[BẢNG]\n{tableContent}", false, 0));
+                // Create a searchable table representation
+                var tableText = $"[BẢNG {tableIndex}]\n{tableContent}";
+                elements.Add((tableText, false, 0));
             }
         }
 
         return elements;
     }
 
-    private static int DetectHeadingLevel(string text)
+    /// <summary>
+    /// Alternative: Get raw text with tables embedded at approximate positions
+    /// </summary>
+    protected static string GetRawTextFromDocxWithInlineTables(string filePath)
     {
-        // Check for Chapter (highest level)
-        if (Regex.IsMatch(text, @"^(CHƯƠNG|Chương)\s+[IVXLCDM\d]+", RegexOptions.IgnoreCase))
-            return 1;
-        
-        // Check for Part
-        if (Regex.IsMatch(text, @"^(PHẦN|Phần)\s+[IVXLCDM\d]+", RegexOptions.IgnoreCase))
-            return 1;
-
-        // Check for Section (Mục)
-        if (Regex.IsMatch(text, @"^(MỤC|Mục)\s+\d+", RegexOptions.IgnoreCase))
-            return 2;
-
-        // Check for Article (Điều)
-        if (Regex.IsMatch(text, @"^Điều\s+\d+", RegexOptions.IgnoreCase))
-            return 3;
-
-        // Check for Clause (Khoản)
-        if (Regex.IsMatch(text, @"^\d+\.\s+[A-ZĐÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬ]"))
-            return 4;
-
-        // Check if text is short and looks like a title (all caps or bold indicators)
-        if (text.Length < 100 && text == text.ToUpper() && !text.Contains("."))
-            return 2;
-
-        return 0;
-    }
-
-    private static string ExtractTableAsStructuredText(dynamic table)
-    {
+        using var document = DocX.Load(filePath);
         var sb = new StringBuilder();
-        bool isFirstRow = true;
-        var headers = new List<string>();
-
-        try
+        
+        // Create a dictionary of table contents indexed by their approximate position
+        var tableContents = new Dictionary<int, string>();
+        int tableIdx = 0;
+        foreach (var table in document.Tables)
         {
-            foreach (var row in table.Rows)
+            var content = ExtractTableAsStructuredText(table);
+            if (!string.IsNullOrWhiteSpace(content))
             {
-                var cells = new List<string>();
-                foreach (var cell in row.Cells)
-                {
-                    var cellText = string.Join(" ", 
-                        ((IEnumerable<dynamic>)cell.Paragraphs)
-                            .Select(p => ((string?)p.Text)?.Trim())
-                            .Where(t => !string.IsNullOrWhiteSpace(t)));
-                    cells.Add(cellText);
-                }
-
-                if (isFirstRow && cells.All(c => c.Length < 50))
-                {
-                    // Likely header row
-                    headers = cells;
-                    isFirstRow = false;
-                    continue;
-                }
-
-                if (headers.Count > 0 && headers.Count == cells.Count)
-                {
-                    // Format as key-value pairs for better embedding
-                    for (int i = 0; i < headers.Count; i++)
-                    {
-                        if (!string.IsNullOrWhiteSpace(cells[i]))
-                            sb.AppendLine($"{headers[i]}: {cells[i]}");
-                    }
-                    sb.AppendLine("---");
-                }
-                else
-                {
-                    sb.AppendLine(string.Join(" | ", cells.Where(c => !string.IsNullOrWhiteSpace(c))));
-                }
-
-                isFirstRow = false;
+                tableContents[tableIdx++] = content;
             }
         }
-        catch
-        {
-            // If dynamic parsing fails, return empty
-        }
 
-        return sb.ToString().Trim();
-    }
+        string? currentTableLabel = null;
+        int usedTableIdx = 0;
 
-    protected static string GetRawTextFromDocx(string filePath)
-    {
-        var elements = GetStructuredTextFromDocx(filePath);
-        var sb = new StringBuilder();
-        
-        foreach (var (text, isHeading, level) in elements)
+        foreach (var p in document.Paragraphs)
         {
-            if (isHeading)
+            var text = p.Text?.Trim();
+            if (string.IsNullOrWhiteSpace(text)) continue;
+
+            // Detect table labels
+            var tableMatch = Regex.Match(text, @"^(Bảng\s+\d+[^:]*):?\s*(.*)", RegexOptions.IgnoreCase);
+            if (tableMatch.Success)
+            {
+                currentTableLabel = tableMatch.Groups[1].Value;
+                sb.AppendLine();
+                sb.AppendLine($"### {text}");
+                
+                // Insert the next table content right after its label
+                if (usedTableIdx < tableContents.Count)
+                {
+                    sb.AppendLine(tableContents[usedTableIdx]);
+                    usedTableIdx++;
+                }
+                sb.AppendLine();
+                continue;
+            }
+
+            int headingLevel = DetectHeadingLevel(text);
+            if (headingLevel > 0)
             {
                 sb.AppendLine();
                 sb.AppendLine($"### {text}");
@@ -187,7 +156,153 @@ partial class Program
             }
         }
 
+        // Append any remaining tables that weren't matched to labels
+        while (usedTableIdx < tableContents.Count)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"### [BẢNG {usedTableIdx + 1}]");
+            sb.AppendLine(tableContents[usedTableIdx]);
+            usedTableIdx++;
+        }
+
         return sb.ToString().Trim();
+    }
+
+    private static int DetectHeadingLevel(string text)
+    {
+        // Normalize: trim and remove common leading characters
+        var normalized = text.Trim();
+        
+        // Remove common leading patterns like "1.", "2.", "a)", "b)", bullets, etc.
+        normalized = Regex.Replace(normalized, @"^[\s\-\•\·\*\◦\▪\►]+", "");
+        normalized = normalized.TrimStart();
+        
+        // Check for Chapter (highest level) - more flexible matching
+        // Matches: "CHƯƠNG 1", "Chương I", "CHƯƠNG 2:", "Chương II.", etc.
+        if (Regex.IsMatch(normalized, @"^(CHƯƠNG|Chương)\s+[IVXLCDM\d]+[\.\:\s]?", RegexOptions.IgnoreCase))
+            return 1;
+        
+        // Check for Part - "PHẦN I", "Phần 1", etc.
+        if (Regex.IsMatch(normalized, @"^(PHẦN|Phần)\s+[IVXLCDM\d]+[\.\:\s]?", RegexOptions.IgnoreCase))
+            return 1;
+
+        // Check for Section (Mục) - "MỤC 1", "Mục 2.", etc.
+        if (Regex.IsMatch(normalized, @"^(MỤC|Mục)\s+\d+[\.\:\s]?", RegexOptions.IgnoreCase))
+            return 2;
+
+        // Check for Article (Điều) - IMPROVED: more flexible patterns
+        // Matches: "Điều 16", "Điều 16.", "Điều 16:", "Điều 16. Xử lý học vụ", etc.
+        // Also handles: "  Điều 16" (with leading spaces - already trimmed above)
+        if (Regex.IsMatch(normalized, @"^Điều\s+\d+[\.\:\s]?", RegexOptions.IgnoreCase))
+            return 3;
+        
+        // Also check for "Điều" appearing anywhere in short text (likely a heading)
+        if (text.Length < 150 && Regex.IsMatch(text, @"Điều\s+\d+[\.\:]", RegexOptions.IgnoreCase))
+            return 3;
+
+        // Check for Clause (Khoản) - "1. Cảnh báo học vụ:", "2. Đình chỉ:", etc.
+        // More comprehensive Vietnamese uppercase letters
+        if (Regex.IsMatch(normalized, @"^\d+\.\s+[A-ZĐÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÈÉẺẼẸÊẾỀỂỄỆÌÍỈĨỊÒÓỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÙÚỦŨỤƯỨỪỬỮỰỲÝỶỸỴ]"))
+            return 4;
+        
+        // Check for lettered clauses - "a) Điểm...", "b) Sinh viên...", etc.
+        if (Regex.IsMatch(normalized, @"^[a-zđ]\)\s+[A-ZĐÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÈÉẺẼẸÊẾỀỂỄỆÌÍỈĨỊÒÓỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÙÚỦŨỤƯỨỪỬỮỰỲÝỶỸỴ]"))
+            return 5;
+
+        // Check if text is short and looks like a title (all caps)
+        if (text.Length < 100 && text.Length > 5 && text == text.ToUpper() && !text.Contains(". "))
+            return 2;
+        
+        // Check for common heading keywords at the start
+        var headingKeywords = new[] { "QUY ĐỊNH", "QUY CHẾ", "HƯỚNG DẪN", "THỦ TỤC", "ĐIỀU KIỆN", "YÊU CẦU" };
+        foreach (var keyword in headingKeywords)
+        {
+            if (normalized.StartsWith(keyword, StringComparison.OrdinalIgnoreCase) && text.Length < 120)
+                return 2;
+        }
+
+        return 0;
+    }
+
+    private static string ExtractTableAsStructuredText(dynamic table)
+    {
+        var sb = new StringBuilder();
+        bool isFirstRow = true;
+        var headers = new List<string>();
+
+        try
+        {
+            var allRows = new List<List<string>>();
+            
+            foreach (var row in table.Rows)
+            {
+                var cells = new List<string>();
+                foreach (var cell in row.Cells)
+                {
+                    var cellText = string.Join(" ", 
+                        ((IEnumerable<dynamic>)cell.Paragraphs)
+                            .Select(p => ((string?)p.Text)?.Trim())
+                            .Where(t => !string.IsNullOrWhiteSpace(t)));
+                    cells.Add(cellText);
+                }
+                allRows.Add(cells);
+            }
+
+            if (allRows.Count == 0) return "";
+
+            // Detect if first row is header (shorter text, likely column names)
+            var firstRow = allRows[0];
+            bool hasHeader = firstRow.All(c => c.Length < 80) && allRows.Count > 1;
+
+            if (hasHeader)
+            {
+                headers = firstRow;
+                allRows = allRows.Skip(1).ToList();
+            }
+
+            // Format each row with headers for better searchability
+            foreach (var row in allRows)
+            {
+                if (headers.Count > 0 && headers.Count == row.Count)
+                {
+                    // Format as "Header1: Value1; Header2: Value2; ..."
+                    // This makes it much easier to search for specific values
+                    var pairs = new List<string>();
+                    for (int i = 0; i < headers.Count; i++)
+                    {
+                        if (!string.IsNullOrWhiteSpace(row[i]))
+                        {
+                            pairs.Add($"{headers[i]}: {row[i]}");
+                        }
+                    }
+                    if (pairs.Count > 0)
+                    {
+                        sb.AppendLine(string.Join("; ", pairs));
+                    }
+                }
+                else
+                {
+                    // No headers or mismatch - just join cells
+                    var nonEmpty = row.Where(c => !string.IsNullOrWhiteSpace(c)).ToList();
+                    if (nonEmpty.Count > 0)
+                    {
+                        sb.AppendLine(string.Join(" | ", nonEmpty));
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // If dynamic parsing fails, return empty
+        }
+
+        return sb.ToString().Trim();
+    }
+
+    protected static string GetRawTextFromDocx(string filePath)
+    {
+        // Use the new method that embeds tables inline with their labels
+        return GetRawTextFromDocxWithInlineTables(filePath);
     }
 
 
@@ -380,11 +495,20 @@ partial class Program
             @"bảo vệ",
             @"học vụ",
             @"cảnh báo học vụ",
+            @"xử lý học vụ",
+            @"đình chỉ",
+            @"đình chỉ học tập",
+            @"buộc thôi học",
             @"thôi học",
             @"bảo lưu",
             @"chuyển ngành",
             @"miễn học",
-            @"công nhận tín chỉ"
+            @"công nhận tín chỉ",
+            @"ĐTBHK",
+            @"vi phạm",
+            @"kỷ luật",
+            @"thi hộ",
+            @"gian lận"
         };
 
         foreach (var pattern in patterns)
@@ -435,19 +559,33 @@ partial class Program
 
         foreach (var filePath in docxFiles)
         {
-            var text = GetRawTextFromDocx(filePath);
             var documentId = Path.GetFileName(filePath);
-            var documentTitle = ExtractDocumentTitle(filePath);
             
-            Console.WriteLine($"Processing: {documentId}");
-            
-            var chunks = ChunkTextSemantic(documentId, documentTitle, text, 
-                maxChunkSize: 1200,    // Smaller for precision
-                minChunkSize: 200,
-                contextOverlap: 100);
-            
-            Console.WriteLine($"  -> {chunks.Count} chunks created");
-            allChunks.AddRange(chunks);
+            try
+            {
+                var text = GetRawTextFromDocx(filePath);
+                var documentTitle = ExtractDocumentTitle(filePath);
+                
+                Console.WriteLine($"Processing: {documentId}");
+                
+                var chunks = ChunkTextSemantic(documentId, documentTitle, text, 
+                    maxChunkSize: 1200,    // Smaller for precision
+                    minChunkSize: 200,
+                    contextOverlap: 100);
+                
+                Console.WriteLine($"  -> {chunks.Count} chunks created");
+                allChunks.AddRange(chunks);
+            }
+            catch (IOException ex)
+            {
+                Console.WriteLine($"⚠️ Skipping {documentId}: File is locked or in use ({ex.Message})");
+                continue;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"⚠️ Error processing {documentId}: {ex.Message}");
+                continue;
+            }
         }
 
         // Create enriched text for embedding (includes metadata for better semantic matching)

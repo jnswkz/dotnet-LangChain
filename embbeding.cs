@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 partial class Program
 {
-    protected static async Task<float[]> EmbedAsyncSingle(string apiKey, string text, HttpClient http, bool isQuery = false)
+    public static async Task<float[]> EmbedAsyncSingle(string apiKey, string text, HttpClient http, bool isQuery = false)
     {
         var jsonOpts = new JsonSerializerOptions(JsonSerializerDefaults.Web);
         var url = $"https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key={apiKey}";
@@ -31,7 +31,7 @@ partial class Program
         return vec;
     }
 
-    protected static async Task<float[][]> EmbedAsyncBatch(string apiKey, IEnumerable<string> texts, HttpClient http)
+    public static async Task<float[][]> EmbedAsyncBatch(string apiKey, IEnumerable<string> texts, HttpClient http)
     {
         var jsonOpts = new JsonSerializerOptions(JsonSerializerDefaults.Web);
         var list = texts.ToList();
@@ -94,7 +94,7 @@ partial class Program
         return result.ToArray();
     }
 
-    protected static float[] Normalize(float[] v)
+    public static float[] Normalize(float[] v)
     {
         double sum = 0;
         for (int i = 0; i < v.Length; i++)
