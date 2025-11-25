@@ -21,11 +21,7 @@ partial class Program
         await using var conn = new NpgsqlConnection(connectionString);
         await conn.OpenAsync();
 
-        // Nếu bạn chỉ muốn clear kb_docs:
         const string sql = @"TRUNCATE TABLE kb_docs;";
-
-        // Hoặc clear nhiều bảng 1 lúc:
-        // const string sql = @"TRUNCATE TABLE kb_docs, kb_db;";
 
         await using var cmd = new NpgsqlCommand(sql, conn);
         await cmd.ExecuteNonQueryAsync();
