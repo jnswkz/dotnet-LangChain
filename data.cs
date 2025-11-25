@@ -14,6 +14,24 @@ partial class Program
     /// Scans Postgres metadata, ensures the vector store exists, and ingests the latest docs.
     /// Returns true if ingestion ran (false when no user tables are found).
     /// </summary>
+    /// 
+    /// 
+    public static async Task ClearVectorStoreAsync(string connectionString)
+    {
+        await using var conn = new NpgsqlConnection(connectionString);
+        await conn.OpenAsync();
+
+        // Nếu bạn chỉ muốn clear kb_docs:
+        const string sql = @"TRUNCATE TABLE kb_docs;";
+
+        // Hoặc clear nhiều bảng 1 lúc:
+        // const string sql = @"TRUNCATE TABLE kb_docs, kb_db;";
+
+        await using var cmd = new NpgsqlCommand(sql, conn);
+        await cmd.ExecuteNonQueryAsync();
+
+        Console.WriteLine("✅ Vector store cleared (kb_docs).");
+    }
     public static async Task<bool> SyncVectorStoreAsync(
         string connectionString,
         string apiKey,
@@ -201,17 +219,26 @@ partial class Program
     private static async Task EnsureKbTableAsync(string cs, int dim, string table = "kb_docs")
     {
         var sql = $@"
-CREATE TABLE IF NOT EXISTS ""{table}"" (
-  id TEXT PRIMARY KEY,
-  content TEXT NOT NULL,
-  metadata TEXT NULL,
-  embedding vector({dim}) NOT NULL
-);";
+    CREATE TABLE IF NOT EXISTS ""{table}"" (
+    id TEXT PRIMARY KEY,
+    content  TEXT NOT NULL,
+    metadata TEXT NULL,
+    embedding vector({dim}) NOT NULL,
+    tsv tsvector
+    );
+
+    ALTER TABLE ""{table}""
+    ADD COLUMN IF NOT EXISTS tsv tsvector;
+
+    CREATE INDEX IF NOT EXISTS idx_{table}_tsv
+    ON ""{table}"" USING GIN (tsv);
+    ";
         await using var conn = new NpgsqlConnection(cs);
         await conn.OpenAsync();
         await using var cmd = new NpgsqlCommand(sql, conn);
         await cmd.ExecuteNonQueryAsync();
     }
+
 
     private static async Task UpsertDocsAsync(string cs, IEnumerable<KbDoc> docs, string table = "kb_docs")
     {
@@ -236,17 +263,21 @@ CREATE TABLE IF NOT EXISTS ""{table}"" (
     private static async Task UpsertBatchAsync(NpgsqlConnection conn, List<KbDoc> batch, string table)
     {
         var sb = new StringBuilder();
-        sb.Append($@"INSERT INTO ""{table}"" (id, content, metadata, embedding) VALUES ");
+        sb.Append($@"INSERT INTO ""{table}"" (id, content, metadata, embedding, tsv) VALUES ");
 
         for (int i = 0; i < batch.Count; i++)
         {
             if (i > 0) sb.Append(",");
-            sb.Append($"(@id{i}, @content{i}, @meta{i}, @emb{i}::vector)");
+
+            // tsv được build trực tiếp từ content{i} ngay trong SQL
+            sb.Append($"(@id{i}, @content{i}, @meta{i}, @emb{i}::vector, to_tsvector('simple', @content{i}))");
         }
+
         sb.Append(@" ON CONFLICT (id) DO UPDATE SET 
-        content = EXCLUDED.content,
-        metadata = EXCLUDED.metadata,
-        embedding = EXCLUDED.embedding;");
+            content   = EXCLUDED.content,
+            metadata  = EXCLUDED.metadata,
+            embedding = EXCLUDED.embedding,
+            tsv       = EXCLUDED.tsv;");
 
         await using var cmd = new NpgsqlCommand(sb.ToString(), conn);
 
@@ -292,6 +323,194 @@ LIMIT @k;";
         }
         return results;
     }
+
+/// <summary>
+/// Expands Vietnamese query with synonyms and related terms for better retrieval
+/// </summary>
+private static string ExpandVietnameseQuery(string question)
+{
+    var expanded = question;
+    
+    // Vietnamese academic term synonyms and expansions
+    var synonyms = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+    {
+        { "tốt nghiệp", new[] { "tốt nghiệp", "hoàn thành", "ra trường", "cấp bằng" } },
+        { "xét tốt nghiệp", new[] { "xét tốt nghiệp", "công nhận tốt nghiệp", "điều kiện tốt nghiệp" } },
+        { "điểm", new[] { "điểm", "điểm số", "thang điểm", "điểm trung bình" } },
+        { "học phí", new[] { "học phí", "đóng học phí", "miễn giảm học phí", "phí" } },
+        { "tín chỉ", new[] { "tín chỉ", "số tín chỉ", "đăng ký tín chỉ" } },
+        { "khóa luận", new[] { "khóa luận", "luận văn", "đồ án tốt nghiệp", "KLTN" } },
+        { "đồ án", new[] { "đồ án", "khóa luận", "đồ án tốt nghiệp", "ĐATN" } },
+        { "cảnh báo", new[] { "cảnh báo", "cảnh báo học vụ", "buộc thôi học" } },
+        { "điều kiện", new[] { "điều kiện", "yêu cầu", "tiêu chuẩn", "quy định" } },
+        { "quy trình", new[] { "quy trình", "thủ tục", "cách thức", "hướng dẫn" } },
+        { "bảo vệ", new[] { "bảo vệ", "bảo vệ khóa luận", "hội đồng bảo vệ" } },
+        { "công nhận", new[] { "công nhận", "xác nhận", "chấp nhận" } },
+    };
+
+    // Build expanded query for full-text search
+    var terms = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    var words = question.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+    
+    foreach (var word in words)
+    {
+        terms.Add(word);
+    }
+
+    // Add synonyms
+    foreach (var kvp in synonyms)
+    {
+        if (question.Contains(kvp.Key, StringComparison.OrdinalIgnoreCase))
+        {
+            foreach (var syn in kvp.Value)
+            {
+                terms.Add(syn);
+            }
+        }
+    }
+
+    return string.Join(" ", terms);
+}
+
+/// <summary>
+/// Improved hybrid search with query expansion, better BM25, and re-ranking
+/// </summary>
+private static async Task<List<KbHit>> HybridSearchAsync(
+    string connectionString,
+    string question,
+    float[] queryEmbedding,
+    int k = 15,                      
+    string table = "kb_docs")
+{
+    await using var conn = new NpgsqlConnection(connectionString);
+    await conn.OpenAsync();
+
+    var vecText = "[" + string.Join(",",
+        queryEmbedding.Select(x => x.ToString(System.Globalization.CultureInfo.InvariantCulture))) + "]";
+
+    // Expand query with Vietnamese synonyms
+    var expandedQuery = ExpandVietnameseQuery(question);
+    
+    // Use plainto_tsquery for more flexible matching (handles Vietnamese better)
+    // Fetch more candidates for re-ranking
+    var sql = $@"
+WITH q AS (
+    SELECT
+        @q::text AS query_text,
+        @expanded::text AS expanded_text,
+        plainto_tsquery('simple', @expanded) AS query_ft
+),
+base AS (
+    SELECT
+        d.id,
+        d.content,
+        d.metadata,
+        -- Vector similarity (cosine distance converted to similarity)
+        1 - (d.embedding <=> {Quote(vecText)}::vector) AS vec_score,
+        -- BM25-style scoring with ts_rank_cd
+        COALESCE(ts_rank_cd(d.tsv, q.query_ft, 32), 0) AS bm25_score,
+        -- Boost for exact phrase matches
+        CASE WHEN d.content ILIKE '%' || @q || '%' THEN 0.15 ELSE 0 END AS exact_boost,
+        -- Boost for metadata/keyword matches
+        CASE 
+            WHEN d.metadata ILIKE '%' || @q || '%' THEN 0.1
+            WHEN d.metadata ILIKE '%tốt nghiệp%' AND @q ILIKE '%tốt nghiệp%' THEN 0.08
+            ELSE 0 
+        END AS meta_boost
+    FROM ""{table}"" d
+    CROSS JOIN q
+)
+SELECT
+    id,
+    content,
+    metadata,
+    vec_score,
+    bm25_score,
+    -- Hybrid scoring with dynamic weighting
+    GREATEST(
+        -- Primary: weighted combination
+        (0.55 * vec_score) + (0.25 * LEAST(bm25_score * 2, 1.0)) + exact_boost + meta_boost,
+        -- Fallback: pure vector if BM25 fails
+        0.8 * vec_score + exact_boost
+    ) AS final_score
+FROM base
+WHERE vec_score > 0.3 OR bm25_score > 0.001  -- Filter out very low relevance
+ORDER BY final_score DESC
+LIMIT @k * 2;  -- Fetch extra for re-ranking
+";
+
+    using var cmd = new NpgsqlCommand(sql, conn);
+    cmd.Parameters.AddWithValue("q", question);
+    cmd.Parameters.AddWithValue("expanded", expandedQuery);
+    cmd.Parameters.AddWithValue("k", k);
+
+    var candidates = new List<KbHit>();
+    await using var reader = await cmd.ExecuteReaderAsync();
+    while (await reader.ReadAsync())
+    {
+        candidates.Add(new KbHit(
+            Id:       reader.GetString(0),
+            Content:  reader.GetString(1),
+            Metadata: reader.IsDBNull(2) ? null : reader.GetString(2),
+            Score:    reader.GetDouble(5)
+        ));
+    }
+
+    // Re-rank: boost chunks that contain key question terms
+    var reranked = ReRankResults(candidates, question);
+    
+    return reranked.Take(k).ToList();
+}
+
+/// <summary>
+/// Re-ranks results based on additional heuristics
+/// </summary>
+private static List<KbHit> ReRankResults(List<KbHit> candidates, string question)
+{
+    var questionLower = question.ToLower();
+    var questionTerms = questionLower
+        .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+        .Where(t => t.Length > 2)
+        .ToHashSet();
+
+    return candidates
+        .Select(hit => 
+        {
+            var contentLower = hit.Content.ToLower();
+            var boost = 0.0;
+            
+            // Boost for containing multiple question terms
+            var matchedTerms = questionTerms.Count(t => contentLower.Contains(t));
+            boost += matchedTerms * 0.02;
+            
+            // Boost for regulatory content when asking about điều kiện/quy định
+            if ((questionLower.Contains("điều kiện") || questionLower.Contains("quy định")) 
+                && (contentLower.Contains("điều kiện") || contentLower.Contains("phải")))
+            {
+                boost += 0.05;
+            }
+            
+            // Boost for procedure content when asking about quy trình
+            if (questionLower.Contains("quy trình") && 
+                (contentLower.Contains("bước") || contentLower.Contains("quy trình")))
+            {
+                boost += 0.05;
+            }
+            
+            // Boost for article references
+            if (System.Text.RegularExpressions.Regex.IsMatch(hit.Content, @"Điều\s+\d+", 
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+            {
+                boost += 0.02;
+            }
+
+            return new KbHit(hit.Id, hit.Content, hit.Metadata, hit.Score + boost);
+        })
+        .OrderByDescending(h => h.Score)
+        .ToList();
+}
+
+
 
     private static string Quote(string s) => "'" + s.Replace("'", "''") + "'";
 

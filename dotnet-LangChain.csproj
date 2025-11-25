@@ -10,6 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="DocX" Version="5.0.0" />
     <PackageReference Include="dotenv.net" Version="4.0.0" />
     <PackageReference Include="LangChain" Version="0.17.0" />
     <PackageReference Include="LangChain.Databases.Postgres" Version="0.17.0" />
