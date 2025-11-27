@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.OpenApi.Models;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -42,6 +43,23 @@ public class ChatApi
             });
         });
 
+        // Configure Swagger/OpenAPI
+        builder.Services.AddEndpointsApiExplorer();
+        builder.Services.AddSwaggerGen(options =>
+        {
+            options.SwaggerDoc("v1", new OpenApiInfo
+            {
+                Title = "eUIT Chatbot API",
+                Version = "v1",
+                Description = "REST API for the eUIT QA Chatbot service powered by Gemini AI",
+                Contact = new OpenApiContact
+                {
+                    Name = "eUIT Team",
+                    Email = "support@euit.edu.vn"
+                }
+            });
+        });
+
         // Register services
         builder.Services.AddSingleton(_qaService);
 
@@ -49,6 +67,15 @@ public class ChatApi
 
         // Configure middleware
         app.UseCors();
+
+        // Enable Swagger UI
+        app.UseSwagger();
+        app.UseSwaggerUI(options =>
+        {
+            options.SwaggerEndpoint("/swagger/v1/swagger.json", "eUIT Chatbot API v1");
+            options.RoutePrefix = string.Empty; // Swagger UI at root
+            options.DocumentTitle = "eUIT Chatbot API";
+        });
 
         // ==================== ENDPOINTS ====================
 
@@ -59,7 +86,11 @@ public class ChatApi
             Timestamp = DateTime.UtcNow,
             Version = "1.0.0"
         }))
-        .WithName("HealthCheck");
+        .WithName("HealthCheck")
+        .WithTags("System")
+        .WithSummary("Health Check")
+        .WithDescription("Returns the health status of the API service")
+        .Produces<HealthResponse>(StatusCodes.Status200OK);
 
         // POST /api/chat - Main chat endpoint
         app.MapPost("/api/chat", async (ChatApiRequest request, QAService qaService) =>
@@ -107,7 +138,13 @@ public class ChatApi
                 }, statusCode: 500);
             }
         })
-        .WithName("Chat");
+        .WithName("Chat")
+        .WithTags("Chat")
+        .WithSummary("Ask a Question")
+        .WithDescription("Send a question to the AI chatbot and receive an answer based on the knowledge base")
+        .Produces<ChatResponse>(StatusCodes.Status200OK)
+        .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+        .Produces<ErrorResponse>(StatusCodes.Status500InternalServerError);
 
         // Print startup info
         Console.WriteLine();
@@ -115,6 +152,9 @@ public class ChatApi
         Console.WriteLine("Endpoints:");
         Console.WriteLine("POST /api/chat    - Ask a question   ");
         Console.WriteLine("GET  /health      - Health check     ");
+        Console.WriteLine();
+        Console.WriteLine($"Swagger UI: http://localhost:{port}/");
+        Console.WriteLine($"Swagger JSON: http://localhost:{port}/swagger/v1/swagger.json");
         Console.WriteLine();
 
         await app.RunAsync($"http://localhost:{port}");
