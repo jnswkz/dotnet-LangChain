@@ -103,30 +103,39 @@ BẠN LÀ CHUYÊN GIA TƯ VẤN HỌC VỤ của Trường Đại học Công ng
 
 NHIỆM VỤ: Trả lời câu hỏi của sinh viên dựa trên các quy chế, quy định chính thức được cung cấp bên dưới.
 
+⚠️ HƯỚNG DẪN ĐỌC CONTEXT:
+- ĐỌC KỸ TOÀN BỘ context trước khi trả lời, đặc biệt chú ý các CON SỐ CỤ THỂ (số tiết, số tín chỉ, điểm, thời gian...)
+- Chú ý các BẢNG BIỂU có dạng ""Bảng X. ..."" hoặc liệt kê dữ liệu theo dòng - đây thường là câu trả lời trực tiếp
+- Các quy định thường nằm trong ""Điều X. ..."" hoặc ""Khoản X..."" - trích dẫn chính xác
+- Nếu câu hỏi về ĐIỀU KIỆN, tìm các từ khóa: ""nếu"", ""được phép"", ""phải"", ""tối thiểu"", ""tối đa""
+- Nếu câu hỏi về THỜI HẠN, tìm các từ khóa: ""trong vòng"", ""trước"", ""sau"", ""chậm nhất""
+
 NGUYÊN TẮC TRẢ LỜI:
-1. CHỈ sử dụng thông tin từ CONTEXT bên dưới - KHÔNG được tự suy diễn hoặc thêm thông tin
-2. Nếu CONTEXT chứa thông tin trực tiếp trả lời được câu hỏi → Trả lời đầy đủ, chính xác
-3. Nếu CONTEXT chỉ có một phần thông tin → Trả lời phần có thể, ghi rõ ""phần này chưa được nêu trong tài liệu""
-4. Nếu CONTEXT không có thông tin liên quan → Trả lời: ""Mình không có thông tin để trả lời câu hỏi này.""
-5. Trích dẫn điều khoản cụ thể khi có (VD: ""Theo Điều 15..."")
+1. CHỈ sử dụng thông tin từ CONTEXT - KHÔNG tự suy diễn
+2. ƯU TIÊN trích xuất SỐ LIỆU CỤ THỂ: số tiết, số tín chỉ, điểm số, thời gian, mức điểm TOEIC/IELTS...
+3. Nếu context có thông tin → PHẢI trả lời, kèm trích dẫn điều khoản (""Theo Điều X..."")
+4. Giải thích các từ viết tắt nếu có trong context: I (chưa hoàn thành), M (miễn), BL (bảo lưu)...
+5. Nếu context có nhiều trường hợp (VD: CTC, CTTT, CLC...) → liệt kê rõ từng trường hợp
 6. Dùng bullet points cho danh sách điều kiện
-7. Trả lời bằng tiếng Việt, văn phong thân thiện
-8. Trả lời ngắn gọn, súc tích, tập trung vào câu hỏi
+7. Trả lời bằng tiếng Việt, văn phong thân thiện, ngắn gọn
+8. CHỈ NÓI ""không có thông tin"" khi context THỰC SỰ không đề cập gì liên quan
 
 CONTEXT (Trích từ quy chế đào tạo):
 {context}
 
 CÂU HỎI: {question}
 
-TRẢ LỜI:";
+TRẢ LỜI (nhớ trích xuất số liệu cụ thể nếu có):";
 
         var resp = await _geminiModel.GenerateAsync(new ChatRequest
         {
             Messages = new List<Message>
             {
                 new(
-                    "Bạn là chuyên gia tư vấn học vụ. Chỉ trả lời dựa trên thông tin được cung cấp. " +
-                    "Không bao giờ bịa thông tin. Nếu không chắc chắn, hãy nói rõ.",
+                    "Bạn là chuyên gia tư vấn học vụ của Trường Đại học Công nghệ Thông tin. " +
+                    "Bạn PHẢI trích xuất và trả lời dựa trên thông tin có trong context. " +
+                    "Đặc biệt chú ý các con số cụ thể (số tiết, điểm, thời gian, mức TOEIC/IELTS...). " +
+                    "Không được nói 'không có thông tin' nếu context có chứa câu trả lời.",
                     MessageRole.System,
                     string.Empty),
                 Message.Human(prompt)
@@ -147,9 +156,11 @@ TRẢ LỜI:";
         {
             sb.AppendLine($"\n📄 {group.Key}:");
             sb.AppendLine("─────────────────────");
-            foreach (var hit in group.OrderByDescending(h => h.Score).Take(3))
+            // Lấy tối đa 4 hits từ mỗi source thay vì 3 để không bỏ sót thông tin
+            foreach (var hit in group.OrderByDescending(h => h.Score).Take(4))
             {
-                sb.AppendLine(Program.TrimForPrompt(hit.Content, 800));
+                // Tăng limit lên 1000 ký tự để giữ nhiều context hơn
+                sb.AppendLine(Program.TrimForPrompt(hit.Content, 1000));
                 sb.AppendLine();
             }
         }
