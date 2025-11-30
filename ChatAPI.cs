@@ -157,7 +157,7 @@ public class ChatApi
         Console.WriteLine($"Swagger JSON: http://localhost:{port}/swagger/v1/swagger.json");
         Console.WriteLine();
 
-        await app.RunAsync($"http://localhost:{port}");
+        await app.RunAsync($"http://0.0.0.0:{port}");
     }
 }
 
