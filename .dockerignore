@@ -8,7 +8,6 @@ docker-compose.yml
 *.sh
 .vs/
 .vscode/
-.env
 *.txt
 *.csv
 *.json

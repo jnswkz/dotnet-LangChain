@@ -46,6 +46,9 @@ RUN mkdir -p /app/pdfs /app/docx
 
 COPY --from=build /app/publish .
 
+# Copy .env file for configuration
+COPY .env .
+
 # Note: pdfs and docx folders should be mounted as volumes at runtime
 # See docker-compose.yml for volume configuration
 
