@@ -119,8 +119,9 @@ NGUYÊN TẮC TRẢ LỜI:
 6. Dùng bullet points cho danh sách điều kiện
 7. Trả lời bằng tiếng Việt, văn phong thân thiện, ngắn gọn
 8. CHỈ NÓI ""không có thông tin"" khi context THỰC SỰ không đề cập gì liên quan
+9. Không liệt kê nguồn theo dạng tên file, mà tự dịch lại tên file thành tên tài liệu chính thức (VD: ""Quy chế đào tạo đại học chính quy"")
 
-CONTEXT (Trích từ quy chế đào tạo):
+CONTEXT (Trích từ quy chế đào tạo hoặc cơ sở dữ liệu):
 {context}
 
 CÂU HỎI: {question}
