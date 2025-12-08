@@ -48,7 +48,7 @@ var googleConfig = new GoogleConfiguration
 };
 
 var googleProvider = new GoogleProvider(googleConfig, httpClient);
-var geminiModel = new GoogleChatModel(googleProvider, "gemini-2.5-pro");
+var geminiModel = new GoogleChatModel(googleProvider, "gemini-2.5-flash");
 
 var forceReingest = env.TryGetValue("FORCE_REINGEST", out var forceFlag) &&
                     string.Equals(forceFlag, "1", StringComparison.OrdinalIgnoreCase);

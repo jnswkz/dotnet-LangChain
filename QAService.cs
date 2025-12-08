@@ -35,11 +35,24 @@ public class QAService
             // Embed the question
             var qVec = Program.Normalize(await Program.EmbedAsyncSingle(_apiKey, question, _httpClient, isQuery: true));
             
-            // Hybrid search
-            var hits = await Program.HybridSearchAsync(_connectionString, question, qVec, k: 10, table: "kb_docs");
-            result.HitCount = hits.Count;
+            // Search BOTH document embeddings (kb_docs) and database embeddings (db_embeddings)
+            var docHitsTask = Program.HybridSearchAsync(_connectionString, question, qVec, k: 10, table: "kb_docs");
+            var dbHitsTask = Program.HybridSearchAsync(_connectionString, question, qVec, k: 10, table: "db_embeddings");
+            
+            await Task.WhenAll(docHitsTask, dbHitsTask);
+            
+            var docHits = await docHitsTask;
+            var dbHits = await dbHitsTask;
+            
+            // Merge and sort by score
+            var allHits = docHits.Concat(dbHits)
+                .OrderByDescending(h => h.Score)
+                .Take(10)
+                .ToList();
+            
+            result.HitCount = allHits.Count;
 
-            if (hits.Count == 0)
+            if (allHits.Count == 0)
             {
                 result.Answer = await GetGeneralResponseAsync(question);
                 result.HasContext = false;
@@ -49,15 +62,15 @@ public class QAService
                 // Save context
                 if (showContext)
                 {
-                    result.Context = string.Join("\n---\n", hits.Select(h =>
+                    result.Context = string.Join("\n---\n", allHits.Select(h =>
                         $"[Source: {h.Metadata ?? "unknown"} | score={h.Score:F4}]\n{Program.TrimForPrompt(h.Content, 800)}"));
                 }
 
                 // Build context và tạo prompt
-                var groupedContext = GroupContextBySources(hits.Take(8).ToList());
+                var groupedContext = GroupContextBySources(allHits.Take(8).ToList());
                 result.Answer = await GetRAGResponseAsync(question, groupedContext);
                 result.HasContext = true;
-                result.TopScore = hits.Max(h => h.Score);
+                result.TopScore = allHits.Max(h => h.Score);
             }
         }
         catch (Exception ex)
@@ -101,27 +114,32 @@ Nguyên tắc trả lời:
         var prompt = $@"
 BẠN LÀ CHUYÊN GIA TƯ VẤN HỌC VỤ của Trường Đại học Công nghệ Thông tin (UIT).
 
-NHIỆM VỤ: Trả lời câu hỏi của sinh viên dựa trên các quy chế, quy định chính thức được cung cấp bên dưới.
+NHIỆM VỤ: Trả lời câu hỏi của sinh viên dựa trên:
+1. Quy chế, quy định chính thức (từ văn bản .docx)
+2. Dữ liệu thực tế trong hệ thống (từ cơ sở dữ liệu)
 
 ⚠️ HƯỚNG DẪN ĐỌC CONTEXT:
-- ĐỌC KỸ TOÀN BỘ context trước khi trả lời, đặc biệt chú ý các CON SỐ CỤ THỂ (số tiết, số tín chỉ, điểm, thời gian...)
-- Chú ý các BẢNG BIỂU có dạng ""Bảng X. ..."" hoặc liệt kê dữ liệu theo dòng - đây thường là câu trả lời trực tiếp
-- Các quy định thường nằm trong ""Điều X. ..."" hoặc ""Khoản X..."" - trích dẫn chính xác
-- Nếu câu hỏi về ĐIỀU KIỆN, tìm các từ khóa: ""nếu"", ""được phép"", ""phải"", ""tối thiểu"", ""tối đa""
-- Nếu câu hỏi về THỜI HẠN, tìm các từ khóa: ""trong vòng"", ""trước"", ""sau"", ""chậm nhất""
+- Context có 2 LOẠI NGUỒN:
+  * 📄 Tài liệu: Quy chế, quy định chính thức
+  * 🗄️ Dữ liệu: Thông tin từ bảng dữ liệu (bảng điểm, môn học, lịch học, lịch thi...)
+- ĐỌC KỸ TOÀN BỘ context trước khi trả lời, đặc biệt chú ý các CON SỐ CỤ THỂ
+- Với DỮ LIỆU từ database: Đây là thông tin THỰC TẾ (ví dụ: điểm của sinh viên, danh sách môn học...)
+- Với TÀI LIỆU: Chú ý ""Điều X"", ""Khoản X"", ""Bảng X"" - trích dẫn chính xác
+- Nếu câu hỏi về ĐIỀU KIỆN, tìm: ""nếu"", ""được phép"", ""phải"", ""tối thiểu"", ""tối đa""
+- Nếu câu hỏi về THỜI HẠN, tìm: ""trong vòng"", ""trước"", ""sau"", ""chậm nhất""
 
 NGUYÊN TẮC TRẢ LỜI:
 1. CHỈ sử dụng thông tin từ CONTEXT - KHÔNG tự suy diễn
 2. ƯU TIÊN trích xuất SỐ LIỆU CỤ THỂ: số tiết, số tín chỉ, điểm số, thời gian, mức điểm TOEIC/IELTS...
-3. Nếu context có thông tin → PHẢI trả lời, kèm trích dẫn điều khoản (""Theo Điều X..."")
-4. Giải thích các từ viết tắt nếu có trong context: I (chưa hoàn thành), M (miễn), BL (bảo lưu)...
-5. Nếu context có nhiều trường hợp (VD: CTC, CTTT, CLC...) → liệt kê rõ từng trường hợp
-6. Dùng bullet points cho danh sách điều kiện
-7. Trả lời bằng tiếng Việt, văn phong thân thiện, ngắn gọn
-8. CHỈ NÓI ""không có thông tin"" khi context THỰC SỰ không đề cập gì liên quan
-9. Không liệt kê nguồn theo dạng tên file, mà tự dịch lại tên file thành tên tài liệu chính thức (VD: ""Quy chế đào tạo đại học chính quy"")
+3. Nếu context từ DATABASE → trả lời dựa trên dữ liệu thực tế
+4. Nếu context từ DOCUMENT → trích dẫn điều khoản (""Theo Điều X..."")
+5. Giải thích các từ viết tắt: I (chưa hoàn thành), M (miễn), BL (bảo lưu)...
+6. Nếu có nhiều trường hợp (VD: CTC, CTTT, CLC...) → liệt kê rõ từng trường hợp
+7. Dùng bullet points cho danh sách
+8. Trả lời bằng tiếng Việt, văn phong thân thiện, ngắn gọn
+9. CHỈ NÓI ""không có thông tin"" khi context THỰC SỰ không đề cập gì liên quan
 
-CONTEXT (Trích từ quy chế đào tạo hoặc cơ sở dữ liệu):
+CONTEXT (Từ tài liệu quy chế VÀ cơ sở dữ liệu):
 {context}
 
 CÂU HỎI: {question}
@@ -149,13 +167,20 @@ TRẢ LỜI (nhớ trích xuất số liệu cụ thể nếu có):";
     private static string GroupContextBySources(List<KbHit> hits)
     {
         var grouped = hits
-            .GroupBy(h => ExtractDocName(h.Metadata))
+            .GroupBy(h => new { 
+                Name = ExtractDocName(h.Metadata),
+                IsDatabase = IsFromDatabase(h.Metadata)
+            })
             .OrderByDescending(g => g.Max(h => h.Score));
 
         var sb = new StringBuilder();
         foreach (var group in grouped)
         {
-            sb.AppendLine($"\n📄 {group.Key}:");
+            // Use different icons for document vs database sources
+            var icon = group.Key.IsDatabase ? "🗄️" : "📄";
+            var sourceType = group.Key.IsDatabase ? "[Dữ liệu DB]" : "[Tài liệu]";
+            
+            sb.AppendLine($"\n{icon} {sourceType} {group.Key.Name}:");
             sb.AppendLine("─────────────────────");
             // Lấy tối đa 4 hits từ mỗi source thay vì 3 để không bỏ sót thông tin
             foreach (var hit in group.OrderByDescending(h => h.Score).Take(4))
@@ -166,6 +191,15 @@ TRẢ LỜI (nhớ trích xuất số liệu cụ thể nếu có):";
             }
         }
         return sb.ToString();
+    }
+    
+    private static bool IsFromDatabase(string? metadata)
+    {
+        if (string.IsNullOrEmpty(metadata)) return false;
+        // Check if metadata indicates it's from database
+        return metadata.Contains("table:") || 
+               metadata.Contains("schema:") || 
+               metadata.ToLower().Contains("database");
     }
 
     private static string ExtractDocName(string? metadata)
