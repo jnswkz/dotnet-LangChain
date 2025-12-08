@@ -25,8 +25,9 @@ public class QAService
     /// </summary>
     /// <param name="question">The question to answer</param>
     /// <param name="showContext">Whether to include context in the result</param>
+    /// <param name="userId">Optional userId/MSSV to query specific student data</param>
     /// <returns>QAResult containing the answer, context used, and hit count</returns>
-    public async Task<QAResult> AnswerQuestionAsync(string question, bool showContext = false)
+    public async Task<QAResult> AnswerQuestionAsync(string question, bool showContext = false, string? userId = null)
     {
         var result = new QAResult { Question = question };
 
@@ -35,20 +36,26 @@ public class QAService
             // Embed the question
             var qVec = Program.Normalize(await Program.EmbedAsyncSingle(_apiKey, question, _httpClient, isQuery: true));
             
-            // Search BOTH document embeddings (kb_docs) and database embeddings (db_embeddings)
-            var docHitsTask = Program.HybridSearchAsync(_connectionString, question, qVec, k: 10, table: "kb_docs");
-            var dbHitsTask = Program.HybridSearchAsync(_connectionString, question, qVec, k: 10, table: "db_embeddings");
+            // Search document embeddings (kb_docs)
+            var docHits = await Program.HybridSearchAsync(_connectionString, question, qVec, k: 10, table: "kb_docs");
             
-            await Task.WhenAll(docHitsTask, dbHitsTask);
+            var allHits = docHits.ToList();
             
-            var docHits = await docHitsTask;
-            var dbHits = await dbHitsTask;
-            
-            // Merge and sort by score
-            var allHits = docHits.Concat(dbHits)
-                .OrderByDescending(h => h.Score)
-                .Take(10)
-                .ToList();
+            // If userId is provided, query database directly for student-specific data
+            if (!string.IsNullOrWhiteSpace(userId))
+            {
+                var studentData = await QueryStudentDataAsync(userId);
+                if (!string.IsNullOrEmpty(studentData))
+                {
+                    // Add student data as a high-priority hit
+                    allHits.Insert(0, new KbHit(
+                        Id: $"student:{userId}",
+                        Content: studentData,
+                        Metadata: $"database:student_data;mssv:{userId}",
+                        Score: 1.0  // Highest priority
+                    ));
+                }
+            }
             
             result.HitCount = allHits.Count;
 
@@ -80,6 +87,119 @@ public class QAService
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Query student-specific data from database by MSSV
+    /// </summary>
+    private async Task<string> QueryStudentDataAsync(string mssv)
+    {
+        try
+        {
+            await using var conn = new Npgsql.NpgsqlConnection(_connectionString);
+            await conn.OpenAsync();
+            
+            var sb = new StringBuilder();
+            sb.AppendLine($"=== DỮ LIỆU SINH VIÊN MSSV: {mssv} ===");
+            sb.AppendLine();
+
+            // Query student info
+            var studentSql = @"
+                SELECT ho_ten, ngay_sinh, nganh_hoc, khoa_hoc, lop_sinh_hoat, email_ca_nhan
+                FROM sinh_vien WHERE mssv = @mssv";
+            await using (var cmd = new Npgsql.NpgsqlCommand(studentSql, conn))
+            {
+                cmd.Parameters.AddWithValue("@mssv", int.Parse(mssv));
+                await using var reader = await cmd.ExecuteReaderAsync();
+                if (await reader.ReadAsync())
+                {
+                    sb.AppendLine($"Họ tên: {reader.GetString(0)}");
+                    sb.AppendLine($"Ngày sinh: {reader.GetDateTime(1):dd/MM/yyyy}");
+                    sb.AppendLine($"Ngành học: {reader.GetString(2)}");
+                    sb.AppendLine($"Khóa học: {reader.GetString(3)}");
+                    sb.AppendLine($"Lớp sinh hoạt: {reader.GetString(4)}");
+                    sb.AppendLine($"Email: {reader.GetString(5)}");
+                    sb.AppendLine();
+                }
+            }
+
+            // Query registered courses (from ket_qua_hoc_tap)
+            var coursesSql = @"
+                SELECT DISTINCT k.ma_lop, m.ten_mon_hoc_vn, k.diem_qua_trinh, k.diem_giua_ki, 
+                       k.diem_thuc_hanh, k.diem_cuoi_ki, k.ghi_chu
+                FROM ket_qua_hoc_tap k
+                JOIN mon_hoc m ON k.ma_lop_goc = m.ma_mon_hoc
+                WHERE k.mssv = @mssv
+                ORDER BY k.ma_lop";
+            await using (var cmd = new Npgsql.NpgsqlCommand(coursesSql, conn))
+            {
+                cmd.Parameters.AddWithValue("@mssv", int.Parse(mssv));
+                await using var reader = await cmd.ExecuteReaderAsync();
+                if (reader.HasRows)
+                {
+                    sb.AppendLine("DANH SÁCH MÔN HỌC ĐÃ ĐĂNG KÝ:");
+                    while (await reader.ReadAsync())
+                    {
+                        sb.AppendLine($"- Lớp: {reader.GetString(0)} - {reader.GetString(1)}");
+                        if (!reader.IsDBNull(2)) sb.AppendLine($"  Điểm QT: {reader.GetDecimal(2)}");
+                        if (!reader.IsDBNull(3)) sb.AppendLine($"  Điểm GK: {reader.GetDecimal(3)}");
+                        if (!reader.IsDBNull(4)) sb.AppendLine($"  Điểm TH: {reader.GetDecimal(4)}");
+                        if (!reader.IsDBNull(5)) sb.AppendLine($"  Điểm CK: {reader.GetDecimal(5)}");
+                        if (!reader.IsDBNull(6)) sb.AppendLine($"  Ghi chú: {reader.GetString(6)}");
+                    }
+                    sb.AppendLine();
+                }
+            }
+
+            // Query tuition fees
+            var tuitionSql = @"
+                SELECT hoc_ky, so_tin_chi, hoc_phi, no_hoc_ky_truoc, da_dong, so_tien_con_lai
+                FROM hoc_phi WHERE mssv = @mssv
+                ORDER BY hoc_ky DESC LIMIT 5";
+            await using (var cmd = new Npgsql.NpgsqlCommand(tuitionSql, conn))
+            {
+                cmd.Parameters.AddWithValue("@mssv", int.Parse(mssv));
+                await using var reader = await cmd.ExecuteReaderAsync();
+                if (reader.HasRows)
+                {
+                    sb.AppendLine("THÔNG TIN HỌC PHÍ:");
+                    while (await reader.ReadAsync())
+                    {
+                        sb.AppendLine($"- Học kỳ: {reader.GetString(0)}");
+                        sb.AppendLine($"  Số tín chỉ: {(!reader.IsDBNull(1) ? reader.GetInt32(1).ToString() : "N/A")}");
+                        sb.AppendLine($"  Học phí: {(!reader.IsDBNull(2) ? reader.GetDecimal(2).ToString("N0") : "N/A")} VNĐ");
+                        sb.AppendLine($"  Còn lại: {(!reader.IsDBNull(5) ? reader.GetDouble(5).ToString("N0") : "N/A")} VNĐ");
+                    }
+                    sb.AppendLine();
+                }
+            }
+
+            // Query language certificates
+            var certSql = @"
+                SELECT loai_chung_chi, diem_so, ngay_cap, trang_thai
+                FROM chung_chi_ngoai_ngu WHERE mssv = @mssv";
+            await using (var cmd = new Npgsql.NpgsqlCommand(certSql, conn))
+            {
+                cmd.Parameters.AddWithValue("@mssv", int.Parse(mssv));
+                await using var reader = await cmd.ExecuteReaderAsync();
+                if (reader.HasRows)
+                {
+                    sb.AppendLine("CHỨNG CHỈ NGOẠI NGỮ:");
+                    while (await reader.ReadAsync())
+                    {
+                        sb.AppendLine($"- {reader.GetString(0)}: {(!reader.IsDBNull(1) ? reader.GetString(1) : "N/A")}");
+                        if (!reader.IsDBNull(2)) sb.AppendLine($"  Ngày cấp: {reader.GetDateTime(2):dd/MM/yyyy}");
+                        if (!reader.IsDBNull(3)) sb.AppendLine($"  Trạng thái: {reader.GetString(3)}");
+                    }
+                }
+            }
+
+            return sb.ToString();
+        }
+        catch (Exception ex)
+        {
+            return $"Không thể truy vấn dữ liệu sinh viên MSSV {mssv}: {ex.Message}";
+        }
     }
 
     private async Task<string> GetGeneralResponseAsync(string question)

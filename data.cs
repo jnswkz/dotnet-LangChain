@@ -23,6 +23,7 @@ partial class Program
 
         Console.WriteLine("Vector store cleared (kb_docs).");
     }
+
     public static async Task<bool> SyncVectorStoreAsync(
         string connectionString,
         string apiKey,

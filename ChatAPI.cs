@@ -110,7 +110,8 @@ public class ChatApi
             {
                 var result = await qaService.AnswerQuestionAsync(
                     request.Question,
-                    request.IncludeContext ?? false
+                    request.IncludeContext ?? false,
+                    request.UserId
                 );
 
                 stopwatch.Stop();
