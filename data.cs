@@ -391,13 +391,19 @@ private static string ExpandVietnameseQuery(string question)
         { "chương trình thứ hai", new[] { "chương trình thứ hai", "ngành thứ hai", "song ngành", "văn bằng 1" } },
         
         // === FOREIGN LANGUAGE (Q22-Q38) ===
-        { "ngoại ngữ", new[] { "ngoại ngữ", "tiếng Anh", "tiếng Nhật", "TOEIC", "IELTS", "chuẩn ngoại ngữ", "chuẩn đầu ra", "Điều 7", "Điều 8", "Điều 9" } },
+        { "ngoại ngữ", new[] { "ngoại ngữ", "tiếng Anh", "tiếng Nhật", "TOEIC", "IELTS", "JLPT", "chuẩn ngoại ngữ", "chuẩn đầu ra", "Điều 7", "Điều 8", "Điều 9" } },
         { "tiếng Anh", new[] { "tiếng Anh", "Anh văn", "ENG01", "ENG02", "ENG03", "ENG04", "ENG05", "English", "ngoại ngữ", "Điều 3", "Điều 4", "Điều 5" } },
-        { "tiếng Nhật", new[] { "tiếng Nhật", "Nhật ngữ", "JLPT", "N3", "N4", "N5", "NAT-TEST", "Việt - Nhật", "CLC", "Điều 6" } },
+        { "tiếng Nhật", new[] { "tiếng Nhật", "Nhật ngữ", "JLPT", "N3", "N4", "N5", "NAT-TEST", "Việt Nhật", "Việt - Nhật", "Nhật Bản", "CLC", "chất lượng cao", "Điều 6", "Điều 9", "Bảng 5" } },
+        { "Việt Nhật", new[] { "Việt Nhật", "Việt - Nhật", "Vietnam-Japan", "tiếng Nhật", "JLPT", "N3", "N4", "N5", "CLC", "chất lượng cao", "chuẩn đầu ra", "Điều 6", "Điều 9" } },
+        { "Công nghệ thông tin", new[] { "Công nghệ thông tin", "CNTT", "IT", "khoa CNTT", "ngành CNTT" } },
+        { "JLPT", new[] { "JLPT", "N3", "N4", "N5", "tiếng Nhật", "Nhật ngữ", "NAT-TEST", "Việt Nhật", "CLC" } },
+        { "N3", new[] { "N3", "JLPT N3", "trình độ N3", "tiếng Nhật", "Việt Nhật", "CLC" } },
+        { "N4", new[] { "N4", "JLPT N4", "trình độ N4", "tiếng Nhật", "Việt Nhật", "CLC" } },
+        { "N5", new[] { "N5", "JLPT N5", "trình độ N5", "tiếng Nhật", "Việt Nhật", "CLC" } },
         { "TOEIC", new[] { "TOEIC", "điểm TOEIC", "Nghe-Đọc", "Nói-Viết", "450", "500", "600", "chuẩn TOEIC", "Bảng 5", "xét tốt nghiệp" } },
         { "IELTS", new[] { "IELTS", "điểm IELTS", "Academic", "General Training", "Indicator", "4.5", "5.0", "6.0" } },
-        { "chuẩn đầu ra", new[] { "chuẩn đầu ra", "chuẩn ngoại ngữ", "xét tốt nghiệp", "miễn học phần", "Điều 9", "Bảng 5" } },
-        { "chuẩn ngoại ngữ", new[] { "chuẩn ngoại ngữ", "chuẩn đầu ra", "chuẩn xét tốt nghiệp", "TOEIC", "IELTS", "Điều 9", "Bảng 5" } },
+        { "chuẩn đầu ra", new[] { "chuẩn đầu ra", "chuẩn ngoại ngữ", "công nhận đạt chuẩn xét tốt nghiệp", "công nhận tốt nghiệp", "miễn học phần", "Điều 9", "Bảng 5", "Bảng 6" } },
+        { "chuẩn ngoại ngữ", new[] { "chuẩn ngoại ngữ", "chuẩn đầu ra", "chuẩn xét tốt nghiệp", "TOEIC", "IELTS", "JLPT", "Điều 9", "Bảng 5", "Bảng 6" } },
         { "miễn học phần", new[] { "miễn học phần", "miễn môn", "xét miễn", "điểm miễn", "điểm M", "Điều 5", "Điều 7", "Bảng 3" } },
         { "xét miễn", new[] { "xét miễn", "miễn học phần", "thời điểm xét miễn", "4 học kỳ", "Điều 7" } },
         { "xếp lớp", new[] { "xếp lớp", "kiểm tra xếp lớp", "thi xếp lớp", "đầu khóa", "Điều 4", "Bảng 2", "Trung tâm Ngoại ngữ" } },
@@ -522,6 +528,11 @@ base AS (
             -- Foreign language (Q22-Q38)
             WHEN d.metadata ILIKE '%ngoại ngữ%' AND (@q ILIKE '%ngoại ngữ%' OR @q ILIKE '%tiếng Anh%' OR @q ILIKE '%TOEIC%' OR @q ILIKE '%IELTS%' OR @q ILIKE '%tiếng Nhật%') THEN 0.2
             WHEN d.metadata ILIKE '%điều 8%' AND (@q ILIKE '%chuẩn%' OR @q ILIKE '%ngoại ngữ%' OR @q ILIKE '%Anh văn%') THEN 0.2
+            WHEN d.metadata ILIKE '%điều 9%' AND (@q ILIKE '%chuẩn%' OR @q ILIKE '%ngoại ngữ%' OR @q ILIKE '%đầu ra%') THEN 0.25
+            WHEN d.metadata ILIKE '%bảng 5%' AND @q ILIKE '%chuẩn%' THEN 0.2
+            WHEN d.metadata ILIKE '%bảng 6%' AND @q ILIKE '%chuẩn%' THEN 0.2
+            WHEN (d.metadata ILIKE '%việt nhật%' OR d.metadata ILIKE '%việt - nhật%') AND @q ILIKE '%việt nhật%' THEN 0.35
+            WHEN d.metadata ILIKE '%tiếng nhật%' AND (@q ILIKE '%tiếng nhật%' OR @q ILIKE '%việt nhật%' OR @q ILIKE '%jlpt%') THEN 0.3
             
             -- Generic match
             WHEN d.metadata ILIKE '%' || @q || '%' THEN 0.1
@@ -573,15 +584,18 @@ base AS (
             -- Foreign language
             WHEN d.content ILIKE '%TOEIC%' AND @q ILIKE '%TOEIC%' THEN 0.2
             WHEN d.content ILIKE '%IELTS%' AND @q ILIKE '%IELTS%' THEN 0.2
-            WHEN d.content ILIKE '%tiếng Nhật%' AND @q ILIKE '%tiếng Nhật%' THEN 0.25
+            WHEN (d.content ILIKE '%Việt Nhật%' OR d.content ILIKE '%Việt - Nhật%') AND @q ILIKE '%việt nhật%' THEN 0.35
+            WHEN d.content ILIKE '%tiếng Nhật%' AND (@q ILIKE '%tiếng Nhật%' OR @q ILIKE '%việt nhật%') THEN 0.3
+            WHEN (d.content ILIKE '%JLPT%' OR d.content ILIKE '%N3%' OR d.content ILIKE '%N4%' OR d.content ILIKE '%N5%') AND (@q ILIKE '%jlpt%' OR @q ILIKE '%việt nhật%' OR @q ILIKE '%tiếng nhật%') THEN 0.3
             WHEN d.content ILIKE '%xếp lớp%' AND @q ILIKE '%xếp lớp%' THEN 0.25
             WHEN d.content ILIKE '%miễn học phần%' AND @q ILIKE '%miễn%' THEN 0.2
-            WHEN d.content ILIKE '%chuẩn đầu ra%' AND @q ILIKE '%chuẩn%' THEN 0.2
+            WHEN d.content ILIKE '%chuẩn đầu ra%' AND @q ILIKE '%chuẩn%' THEN 0.25
             WHEN d.content ILIKE '%ENG01%' AND @q ILIKE '%Anh văn 1%' THEN 0.2
             WHEN d.content ILIKE '%ENG02%' AND @q ILIKE '%Anh văn 2%' THEN 0.2
             WHEN d.content ILIKE '%ENG03%' AND @q ILIKE '%Anh văn 3%' THEN 0.2
             WHEN d.content ILIKE '%bậc%' AND d.content ILIKE '%khung năng lực%' AND @q ILIKE '%bậc%' THEN 0.25
             WHEN d.content ILIKE '%2 năm%' AND @q ILIKE '%thời hạn%' AND @q ILIKE '%chứng chỉ%' THEN 0.25
+            WHEN (d.content ILIKE '%CLC%' OR d.content ILIKE '%chất lượng cao%') AND @q ILIKE '%việt nhật%' THEN 0.25
             
             ELSE 0 
         END AS content_boost
@@ -796,16 +810,49 @@ private static List<KbHit> ReRankResults(List<KbHit> candidates, string question
                 questionLower.Contains("chuẩn đầu ra") || questionLower.Contains("miễn học phần") ||
                 questionLower.Contains("xếp lớp") || questionLower.Contains("chứng chỉ") ||
                 questionLower.Contains("cttt") || questionLower.Contains("ctc") ||
-                questionLower.Contains("cttn"))
+                questionLower.Contains("cttn") || questionLower.Contains("việt nhật") ||
+                questionLower.Contains("nhật bản") || questionLower.Contains("jlpt"))
             {
                 if (contentLower.Contains("điều 8") || metadataLower.Contains("điều 8"))
+                    boost += 0.2;
+                if (contentLower.Contains("điều 9") || metadataLower.Contains("điều 9"))
+                    boost += 0.2;
+                if (contentLower.Contains("bảng 5") || metadataLower.Contains("bảng 5"))
+                    boost += 0.2;
+                if (contentLower.Contains("bảng 6") || metadataLower.Contains("bảng 6"))
                     boost += 0.2;
                 if (contentLower.Contains("toeic"))
                     boost += 0.2;
                 if (contentLower.Contains("ielts"))
                     boost += 0.2;
-                if (contentLower.Contains("tiếng nhật"))
+                
+                // STRONG boost for Vietnam-Japan program queries
+                if (questionLower.Contains("việt nhật") || questionLower.Contains("nhật bản"))
+                {
+                    if (contentLower.Contains("việt nhật") || contentLower.Contains("việt - nhật"))
+                        boost += 0.35;
+                    if (contentLower.Contains("tiếng nhật") || contentLower.Contains("nhật ngữ"))
+                        boost += 0.3;
+                    if (contentLower.Contains("jlpt") || contentLower.Contains("n3") || 
+                        contentLower.Contains("n4") || contentLower.Contains("n5"))
+                        boost += 0.3;
+                    if (contentLower.Contains("clc") || contentLower.Contains("chất lượng cao"))
+                        boost += 0.25;
+                    
+                    // PENALIZE non-Japanese language content when specifically asking about Việt Nhật
+                    if ((contentLower.Contains("tiếng pháp") || contentLower.Contains("tiếng anh") ||
+                         contentLower.Contains("toeic") || contentLower.Contains("ielts") ||
+                         contentLower.Contains("delf") || contentLower.Contains("tcf")) &&
+                        !contentLower.Contains("jlpt") && !contentLower.Contains("tiếng nhật"))
+                    {
+                        boost -= 0.4;  // Strong penalty for irrelevant languages
+                    }
+                }
+                else if (contentLower.Contains("tiếng nhật"))
+                {
                     boost += 0.25;
+                }
+                
                 if (contentLower.Contains("n3") || contentLower.Contains("n4") || contentLower.Contains("n5"))
                     boost += 0.2;
                 if (contentLower.Contains("xếp lớp"))

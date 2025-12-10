@@ -254,10 +254,15 @@ NGUYÊN TẮC TRẢ LỜI:
 3. Nếu context từ DATABASE → trả lời dựa trên dữ liệu thực tế
 4. Nếu context từ DOCUMENT → trích dẫn điều khoản (""Theo Điều X..."")
 5. Giải thích các từ viết tắt: I (chưa hoàn thành), M (miễn), BL (bảo lưu)...
-6. Nếu có nhiều trường hợp (VD: CTC, CTTT, CLC...) → liệt kê rõ từng trường hợp
-7. Dùng bullet points cho danh sách
-8. Trả lời bằng tiếng Việt, văn phong thân thiện, ngắn gọn
-9. CHỈ NÓI ""không có thông tin"" khi context THỰC SỰ không đề cập gì liên quan
+6. ⚠️ QUAN TRỌNG - LỌC THÔNG TIN THEO CHƯƠNG TRÌNH CỤ THỂ:
+   - Nếu hỏi về ""Việt Nhật"" / ""Nhật Bản"" / ""CLC Nhật"" → CHỈ trả lời chứng chỉ TIẾNG NHẬT (JLPT, NAT-TEST)
+   - Nếu hỏi về ""CTTT"" / ""Tiên tiến"" → CHỈ trả lời chứng chỉ cho CTTT
+   - Nếu hỏi về ""CTC"" / ""Chuẩn"" → CHỈ trả lời chứng chỉ cho CTC
+   - KHÔNG liệt kê tất cả các loại chứng chỉ nếu câu hỏi chỉ hỏi về 1 chương trình cụ thể
+7. Nếu có nhiều trường hợp MÀ câu hỏi không chỉ định cụ thể → liệt kê rõ từng trường hợp
+8. Dùng bullet points cho danh sách
+9. Trả lời bằng tiếng Việt, văn phong thân thiện, ngắn gọn
+10. CHỈ NÓI ""không có thông tin"" khi context THỰC SỰ không đề cập gì liên quan
 
 CONTEXT (Từ tài liệu quy chế VÀ cơ sở dữ liệu):
 {context}
